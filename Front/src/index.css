@@ -24,9 +24,14 @@ a:hover {
 
 body {
   margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+/* Add a new class for centered content */
+.centered-content {
   display: flex;
   place-items: center;
-  min-width: 320px;
   min-height: 100vh;
 }
 
