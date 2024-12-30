@@ -10,7 +10,6 @@ import {
     TableRow,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { fetchImportantNews, filterTradesByNews } from '../utils/newsApi';
 
 interface Trade {
     ticket: string;
@@ -90,7 +89,7 @@ function HedgeTrades({ trades = [] }: { trades?: Trade[] }) {
         const loadAndFilterTrades = async () => {
             if (trades.length === 0) return;
 
-            // Commented out filtering logic
+
             // const startDate = trades.reduce((min, trade) => trade.openTime < min ? trade.openTime : min, trades[0].openTime);
             // const endDate = trades.reduce((max, trade) => trade.openTime > max ? trade.openTime : max, trades[0].openTime);
 

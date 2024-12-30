@@ -38,7 +38,7 @@ export async function fetchImportantNews(fromDate: string, toDate: string): Prom
                 access_key: 'DsBQp33PeVHJfrWhP3chmSWWf',
             },
         });
-        return response.data.response.filter((event: NewsEvent) => event.impact === 'High'); // Filter for red-impact news
+        return response.data.response.filter((event: NewsEvent) => event.impact === 'High');
     } catch (error) {
         console.error('Error fetching news:', error);
         return [];
