@@ -1,0 +1,78 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Reasons {
+  OpenPriceSlippage
+  SlippageOnSL
+  HighSpread
+  OpenClosePriceSlippage
+  MaxDrawdown
+  timeout
+}
+
+enum Commends {
+  OpenSlippage
+  SlSlippage
+  OpenSlSlippage
+  HighSpread
+  MaxDrawDown
+}
+
+enum Versions {
+  Meta4
+  Meta5
+  cTrader
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+  logs     Log[]
+}
+
+model Result {
+  id            Int       @id @default(autoincrement())
+  clientId      String?
+  account       String?
+  ticket        String?
+  pair          String?
+  lot           Float?
+  openPrice     Float?
+  tp            Float?
+  sl            Float?
+  closePrice    Float?
+  closeTimeDate DateTime?
+  reason        Reasons?
+  commend       Commends?
+  difference    Float?
+  compensate    Float?
+  firstCheck    Boolean   @default(false)
+  secondCheck   Boolean   @default(false)
+  archivedAt    DateTime?
+  version       Versions?
+
+  @@unique([ticket])
+}
+
+model Log {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  action    String
+  timestamp DateTime @default(now())
+  details   String
+
+  user User @relation(fields: [userId], references: [id])
+}
