@@ -14,7 +14,6 @@ import {
 // Import high impact news from JSON
 import highImpactNews from '../../../back/high_impact_news.json';
 
-/** Extended trade definition */
 interface ExtendedTrade {
     ticket: string;
     openTime: Date;
@@ -27,7 +26,6 @@ interface ExtendedTrade {
     ffTime: string;
 }
 
-/** High-Impact News definition */
 interface NewsEvent {
     date: string;
     time: string;
@@ -36,11 +34,11 @@ interface NewsEvent {
     impact: string;
 }
 
-/** Group of hedged trades (chain) */
 interface HedgedGroup {
     trades: ExtendedTrade[];
     totalProfit: number;
 }
+
 
 /** Convert news date/time to Date object using GMT+2 offset */
 function parseNewsDateTime(news: NewsEvent): Date {
@@ -53,9 +51,7 @@ function tradesOverlap(t1: ExtendedTrade, t2: ExtendedTrade): boolean {
     return t1.openTime < t2.closeTime && t1.closeTime > t2.openTime;
 }
 
-/**
- * Correlation mapping for pairs to related pairs, categorized by direction.
- */
+
 const correlationMap: Record<string, {
     sameDirection: string[],
     oppositeDirection: string[],
@@ -127,6 +123,8 @@ function isTradeRelatedToNewsDirectional(
  * - Correlated instruments as per correlationMap.
  */
 function areTradesHedged(t1: ExtendedTrade, t2: ExtendedTrade): boolean {
+    if (!t1.positionType || !t2.positionType) return false;
+
     if (!tradesOverlap(t1, t2)) {
         return false;
     }
@@ -179,6 +177,7 @@ function areTradesHedged(t1: ExtendedTrade, t2: ExtendedTrade): boolean {
     return hedgedByT1 || hedgedByT2;
 }
 
+
 /** Build a graph of hedging relationships among trades */
 function buildHedgeGraph(trades: ExtendedTrade[]): Map<number, Set<number>> {
     const graph = new Map<number, Set<number>>();
@@ -228,17 +227,19 @@ function findConnectedComponents(graph: Map<number, Set<number>>, tradesLength: 
     return components;
 }
 
-/** Format Date to string in GMT+2 for display */
 function formatDate24GMT2(date: Date): string {
-    const adjustedDate = new Date(date.getTime() + 2 * 60 * 60 * 1000);
-    const year = adjustedDate.getUTCFullYear();
-    const month = String(adjustedDate.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(adjustedDate.getUTCDate()).padStart(2, '0');
-    const hours = String(adjustedDate.getUTCHours()).padStart(2, '0');
-    const minutes = String(adjustedDate.getUTCMinutes()).padStart(2, '0');
-    const seconds = String(adjustedDate.getUTCSeconds()).padStart(2, '0');
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} GMT+2`;
+    return date.toLocaleString('en-GB', {
+        timeZone: 'Europe/Riga',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).replace(',', '');
 }
+
 
 /** Merge chains that share common trades */
 function mergeChains(chains: HedgedGroup[]): HedgedGroup[] {
@@ -290,6 +291,7 @@ const HedgeTrades: React.FC<{ trades: ExtendedTrade[] }> = ({ trades }) => {
             console.log("Window start:", formatDate24GMT2(startWindow), "Window end:", formatDate24GMT2(endWindow));
 
             const newsTrades = trades.filter((t) => {
+                if (!t.pair) return false;
                 const withinWindow = t.openTime <= endWindow && t.closeTime >= startWindow;
                 const relation = isTradeRelatedToNewsDirectional(t.pair, newsItem.currency);
                 return withinWindow && relation.related;
