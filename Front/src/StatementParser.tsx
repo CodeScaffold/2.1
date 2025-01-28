@@ -8,6 +8,11 @@ import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { styled } from '@mui/material/styles';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import HedgeTrades from './components/HedgeTrades';
+import MarginUsage from './components/MarginUsage';
+import highImpactNews from '../../back/src/data/high_impact_news.json';
+import contractSizesData from '../../back/src/data/contractSizes.json';
+
+const contractSizes: Record<string, number> = contractSizesData as Record<string, number>;
 
 interface Trade {
     ticket: string;
@@ -17,7 +22,10 @@ interface Trade {
     pair?: string;
     positionType: string;
     duration: number;
+    openPrice: number;
+    lotSize: number;
 }
+
 
 interface ExtendedTrade extends Trade {
     direction: string; // e.g. "BUY" or "SELL"
@@ -31,6 +39,26 @@ interface ChainViolation {
     totalProfit: number;
 }
 
+interface HedgedGroup {
+    trades: Trade[];
+    totalProfit: number;
+}
+
+interface NewsEvent {
+    date: string;
+    time: string;
+    currency: string;
+    event: string;
+    impact: string;
+}
+
+interface MarginViolation {
+    newsEvent: NewsEvent;
+    trades: Trade[];
+    totalMarginUsed: number;
+    threshold: number;
+}
+
 interface AnalysisResult {
     violations: ChainViolation[];
     profitTarget: number;
@@ -42,7 +70,10 @@ interface AnalysisResult {
     thirtySecondTrades?: Trade[];
     newsHedgeTrades?: Trade[];
     statementNumber?: string | number;
+    marginUsageGroups?: HedgedGroup[];
+    marginViolations?: MarginViolation[];
 }
+
 
 const ITEM_HEIGHT = 48;
 const ITEM_PADDING_TOP = 8;
@@ -56,13 +87,17 @@ const MenuProps = {
 };
 
 const functions = [
-    '30-second-trades',
-    'News hedging',
-    '80% profit target',
-    '50% Margin Usage in news',
+    '30-second',
+    'hedging',
+    '80% profit',
+    '50% Margin',
 ];
 
 const PROFIT_LIMIT_PERCENTAGE = 0.8;
+
+const LEVERAGE = 50;
+const MARGIN_THRESHOLD_PERCENTAGE = 0.5; // 50%
+const WINDOW_MINUTES = 30;
 
 function toForexFactoryDateTime(date: Date): { ffDate: string; ffTime: string } {
     const shortMonth = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
@@ -79,6 +114,78 @@ function toForexFactoryDateTime(date: Date): { ffDate: string; ffTime: string } 
 const getProfitTarget = (accountBalance: number, aggressive: boolean): number => {
     return aggressive ? accountBalance * 0.2 : accountBalance * 0.1;
 };
+
+function parseNewsDateTime(news: NewsEvent): Date {
+    const dateTimeString = `${news.date} ${news.time} GMT+0200`;
+    return new Date(dateTimeString);
+}
+
+
+function calculateMarginViolations(trades: Trade[], initialBalance: number): MarginViolation[] {
+    const violations: MarginViolation[] = [];
+
+    highImpactNews.forEach((news: NewsEvent) => {
+        const newsDateTime = parseNewsDateTime(news);
+        const windowStart = new Date(newsDateTime.getTime() - WINDOW_MINUTES * 60 * 1000);
+        const windowEnd = new Date(newsDateTime.getTime() + WINDOW_MINUTES * 60 * 1000);
+
+        const tradesInWindow = trades.filter(trade =>
+            trade.openTime >= windowStart && trade.openTime <= windowEnd
+        );
+
+        if (tradesInWindow.length === 0) return;
+
+        const totalMarginUsed = tradesInWindow.reduce((sum, trade) => {
+            const pairKey = trade.pair?.toUpperCase() || '';
+            const contractSize = (contractSizes as Record<string, number>)[pairKey] || 0;
+            return sum + (contractSize * trade.openPrice * trade.lotSize) / LEVERAGE;
+        }, 0);
+
+        const threshold = initialBalance * MARGIN_THRESHOLD_PERCENTAGE;
+
+        if (totalMarginUsed > threshold) {
+            violations.push({
+                newsEvent: news,
+                trades: tradesInWindow,
+                totalMarginUsed,
+                threshold,
+            });
+        }
+    });
+
+    return violations;
+}
+
+const calculateMargin = (trade: Trade): number => {
+    const pairKey = trade.pair?.toUpperCase() || '';
+    const contractSize = contractSizes[pairKey] || 0;
+    return (trade.lotSize * contractSize) / LEVERAGE;
+};
+function calculateMarginUsageGroups(trades: Trade[], initialBalance: number): HedgedGroup[] {
+    console.log("Calculating Margin Usage Groups...");
+    console.log("Initial Balance:", initialBalance);
+    console.log("Number of Trades:", trades.length);
+    console.log("Contract Sizes:", contractSizes);
+
+    const marginUsageGroups: HedgedGroup[] = [];
+
+    trades.forEach(trade => {
+        const margin = calculateMargin(trade);
+        console.log(`Trade Ticket: ${trade.ticket}, Margin Used: ${margin}`);
+
+        if (margin > initialBalance * MARGIN_THRESHOLD_PERCENTAGE) {
+            marginUsageGroups.push({
+                trades: [trade],
+                totalProfit: trade.amount,
+            });
+            console.log(`Added to Margin Usage Groups: ${trade.ticket}`);
+        }
+    });
+
+    console.log("Margin Usage Groups:", marginUsageGroups);
+    return marginUsageGroups;
+}
+
 
 const analyzeTradingCompliance = (
     trades: Trade[],
@@ -123,18 +230,23 @@ const analyzeTradingCompliance = (
         violations.push({ trades: [...currentChain], totalProfit });
     }
 
+    const marginViolations = calculateMarginViolations(trades, accountBalance);
+
     return {
         violations,
         profitTarget,
         maxAllowedProfit,
-        isCompliant: violations.length === 0,
+        isCompliant: violations.length === 0 && marginViolations.length === 0,
+        initialBalance: accountBalance,
+        marginViolations,
     };
-};
+}
 
 function extractStatementNumber(fileName: string): string | number {
     const match = fileName.match(/\d+/);
     return match ? parseInt(match[0], 10) : "Unknown";
 }
+
 
 const parseStatement = async (
     file: File,
@@ -153,38 +265,54 @@ const parseStatement = async (
 
         const tradeData: Trade[] = [];
         let initialBalance = 0;
-        let stopParsing = false;
+        let marginUsageGroups: HedgedGroup[] = [];
 
+        // First pass: Find Initial Balance
         for (const row of rows) {
-            if (stopParsing) break;
-
-            const cells = row.querySelectorAll('td');
-
             if (row.textContent?.toLowerCase().includes("initial deposit")) {
+                const cells = row.querySelectorAll('td');
                 const balanceStr = cells[12]?.textContent?.trim().replace(/[^\d.-]/g, '') || '0';
                 initialBalance = parseFloat(balanceStr);
-                continue;
+                console.log("Initial Balance Parsed:", initialBalance); // Debug log
+                break; // Exit after finding initial balance
             }
+        }
+
+        // Second pass: Parse Trades
+        for (const row of rows) {
+            const cells = row.querySelectorAll('td');
+
+            const isOrdersRow = cells[3]?.textContent?.toLowerCase().includes("order");
+            if (isOrdersRow) {
+                continue; // Skip Orders rows without stopping
+            }
+
+            if (cells.length < 14) continue;
 
             const openTimeStr = cells[0]?.textContent?.trim() || '';
             const ticket = cells[1]?.textContent?.trim() || '';
             const pair = cells[2]?.textContent?.trim() || '';
             const positionType = cells[3]?.textContent?.trim() || '';
+            const lotSizeStrRaw = cells[5]?.textContent?.trim() || '';
+            const lotSizeStr = lotSizeStrRaw.replace(',', '.').replace(/[^\d.]/g, ''); // Clean lotSize
+            const openPriceStr = cells[6]?.textContent?.trim() || '';
             const closeTimeStr = cells[9]?.textContent?.trim() || '';
             const amountStr = cells[13]?.textContent?.trim().replace(/[\s,]/g, '') || '0';
 
-            const isOrdersRow = positionType.toLowerCase().includes("order");
-            if (isOrdersRow) {
-                stopParsing = true;
-                continue;
-            }
-            if (cells.length < 14) continue;
 
             const openTime = new Date(`${openTimeStr} GMT+0200`);
             const closeTime = new Date(`${closeTimeStr} GMT+0200`);
             const amount = parseFloat(amountStr);
+            const openPrice = parseFloat(openPriceStr);
+            const lotSize = parseFloat(lotSizeStr);
 
-            if (!isNaN(amount) && !isNaN(openTime.getTime()) && !isNaN(closeTime.getTime())) {
+            if (
+                !isNaN(amount) &&
+                !isNaN(openTime.getTime()) &&
+                !isNaN(closeTime.getTime()) &&
+                !isNaN(openPrice) && // Validate openPrice
+                !isNaN(lotSize)     // Validate lotSize
+            ) {
                 const duration = (closeTime.getTime() - openTime.getTime()) / 1000;
                 tradeData.push({
                     ticket,
@@ -194,7 +322,14 @@ const parseStatement = async (
                     pair,
                     positionType,
                     duration,
+                    openPrice,
+                    lotSize,
                 });
+                console.log(`Parsed Trade: ${ticket}, OpenPrice: ${openPrice}, LotSize: ${lotSize}`);
+            } else {
+                console.warn(`Invalid trade data skipped: Ticket ${ticket}`);
+                console.log(`Parsed Values - OpenPrice: ${openPrice}, LotSize: ${lotSize}`);
+                console.log(`Raw LotSizeStr: "${lotSizeStrRaw}", Clean LotSizeStr: "${lotSizeStr}"`);
             }
         }
 
@@ -205,25 +340,28 @@ const parseStatement = async (
             isCompliant: true,
         };
 
-        if (options.includes('80% profit target')) {
+        if (options.includes('80% profit')) {
             analysisResult = analyzeTradingCompliance(tradeData, initialBalance, aggressive);
         }
 
-        // if (options.includes('30-second-trades')) {
-        //     const thirtySecondTrades = tradeData.filter((t) => {
-        //         const seconds = (t.closeTime.getTime() - t.openTime.getTime()) / 1000;
-        //         return seconds < 30 && t.amount > 0;
-        //     });
-        //     analysisResult.thirtySecondTrades = thirtySecondTrades;
-        // }
-
-        if (options.includes('30-second-trades')) {
+        if (options.includes('30-second')) {
             analysisResult.thirtySecondTrades = tradeData.filter((t) => {
                 const seconds = (t.closeTime.getTime() - t.openTime.getTime()) / 1000;
                 return seconds < 30 && t.amount > 0;
             });
         }
 
+        if (options.includes('50% Margin')) {
+            const marginViolations = calculateMarginViolations(tradeData, initialBalance);
+            marginUsageGroups = calculateMarginUsageGroups(tradeData, initialBalance);
+            console.log("Margin Violations:", marginViolations);
+            console.log("Margin Usage Groups:", marginUsageGroups);
+            analysisResult.marginViolations = marginViolations;
+            analysisResult.marginUsageGroups = marginUsageGroups;
+            if (marginViolations.length > 0 || marginUsageGroups.length > 0) {
+                analysisResult.isCompliant = false;
+            }
+        }
 
         const allTrades: ExtendedTrade[] = tradeData.map((t) => {
             const { ffDate, ffTime } = toForexFactoryDateTime(t.openTime);
@@ -241,8 +379,10 @@ const parseStatement = async (
             initialBalance,
             allTrades,
             statementNumber: extractStatementNumber(file.name),
+            marginUsageGroups, // Existing functionality
         };
-    } catch {
+    } catch (error) {
+        console.error("Error parsing the statement:", error);
         return {
             violations: [],
             profitTarget: 0,
@@ -276,6 +416,7 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
         violations = [],
         thirtySecondTrades = [],
         allTrades = [],
+        marginViolations = [],
     } = result;
 
     function formatDate24GMT2(date: Date): string {
@@ -373,6 +514,14 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                         <HedgeTrades trades={allTrades} />
                     </Box>
                 )}
+
+                {/* Display Margin Violations */}
+                {marginViolations.length > 0 && (
+                    <Box sx={{ mt: 4 }}>
+                        <MarginUsage violations={marginViolations} />
+                    </Box>
+                )}
+
             </Box>
         </ThemeProvider>
     );
@@ -428,7 +577,7 @@ const StatementParser = () => {
                         startIcon={<CloudUploadIcon />}
                         sx={{ minWidth: 180, height: 55, mt: 1 }}
                     >
-                        Upload files
+                        Upload MT5
                         <input
                             type="file"
                             hidden
