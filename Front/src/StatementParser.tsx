@@ -631,6 +631,7 @@ const StatementParser = () => {
                 </Box>
 
                 {analysisResult && <TradingAnalysis result={analysisResult} />}
+
             </Box>
         </ThemeProvider>
     );
