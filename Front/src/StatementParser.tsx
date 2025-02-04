@@ -1,16 +1,24 @@
 import { useEffect, useState } from 'react';
 import {
-    Box, Button, Table, TableBody, TableCell, TableContainer,
+    Box, Skeleton, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, Paper, Typography, FormControl, InputLabel,
     Select, MenuItem, OutlinedInput,
 } from '@mui/material';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+// import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import { styled } from '@mui/material/styles';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import HedgeTrades from './components/HedgeTrades';
 import MarginUsage from './components/MarginUsage';
 import highImpactNews from '../../back/src/data/high_impact_news.json';
 import contractSizesData from '../../back/src/data/contractSizes.json';
+import DropZone from './components/dropZone.tsx';
+import Fade from '@mui/material/Fade';
+import { Radio, RadioGroup, FormControlLabel } from '@mui/material';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+
 
 const contractSizes: Record<string, number> = contractSizesData as Record<string, number>;
 
@@ -393,6 +401,20 @@ const parseStatement = async (
     }
 };
 
+const getFunctionIcon = (option: string) => {
+    switch (option) {
+        case '30-second':
+            return <AccessTimeIcon fontSize="small" sx={{ mr: 1, color: 'secondary.main' }} />;
+        case 'hedging':
+            return <SwapHorizIcon fontSize="small" sx={{ mr: 1, color: 'secondary.main' }} />;
+        case '80% profit':
+            return <TrendingUpIcon fontSize="small" sx={{ mr: 1, color: 'secondary.main' }} />;
+        case '50% Margin':
+            return <AccountBalanceIcon fontSize="small" sx={{ mr: 1, color: 'secondary.main' }} />;
+        default:
+            return null;
+    }
+};
 const darkTheme = createTheme({
     palette: {
         mode: 'dark',
@@ -436,17 +458,39 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
         <ThemeProvider theme={darkTheme}>
             <Box sx={{ mt: 4 }}>
                 {(profitTarget > 0 || maxAllowedProfit > 0) && (
-                    <>
-                        <Typography>Statement #: {statementNumber ?? 'Unknown'}</Typography>
-                        <Typography>Profit Target: ${profitTarget.toFixed(2)}</Typography>
-                        <Typography>Max Allowed Profit (80%): ${maxAllowedProfit.toFixed(2)}</Typography>
-                    </>
+                    <Paper
+                        sx={{
+                            p: 3,
+                            mb: 3,
+                            borderRadius: '8px',
+                            backgroundColor: 'background.default',
+                        }}
+                    >
+                        <Typography variant="h6" color="primary">
+                            Statement #: {statementNumber ?? 'Unknown'}
+                        </Typography>
+                        <Typography variant="body1">
+                            Profit Target: ${profitTarget.toFixed(2)}
+                        </Typography>
+                        <Typography variant="body1">
+                            Max Allowed Profit (80%): ${maxAllowedProfit.toFixed(2)}
+                        </Typography>
+                    </Paper>
                 )}
-
+                {/* Chained Groups Section */}
                 {violations.map((chainedGroup, index) => (
-                    <Box key={index} sx={{ mt: 3 }}>
+                    <Paper
+                        key={index}
+                        sx={{
+                            p: 2,
+                            mt: 3,
+                            borderRadius: '8px',
+                            backgroundColor: 'background.paper',
+                        }}
+                    >
                         <Typography variant="subtitle1">
-                            Chained Group #{index + 1} - Total Profit: ${chainedGroup.totalProfit.toFixed(2)}
+                            Chained Group #{index + 1} - Total Profit: $
+                            {chainedGroup.totalProfit.toFixed(2)}
                         </Typography>
                         <StyledTable>
                             <Table size="small">
@@ -464,17 +508,26 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                                             <TableCell>{trade.ticket}</TableCell>
                                             <TableCell>{formatDate24GMT2(trade.openTime)}</TableCell>
                                             <TableCell>{formatDate24GMT2(trade.closeTime)}</TableCell>
-                                            <TableCell align="right">${trade.amount.toFixed(2)}</TableCell>
+                                            <TableCell align="right">
+                                                ${trade.amount.toFixed(2)}
+                                            </TableCell>
                                         </TableRow>
                                     ))}
                                 </TableBody>
                             </Table>
                         </StyledTable>
-                    </Box>
+                    </Paper>
                 ))}
-
+                {/* Trades Under 30 Seconds Section */}
                 {thirtySecondTrades.length > 0 && (
-                    <Box sx={{ mt: 4 }}>
+                    <Paper
+                        sx={{
+                            p: 2,
+                            mt: 4,
+                            borderRadius: '8px',
+                            backgroundColor: 'background.paper',
+                        }}
+                    >
                         <Typography variant="h6">Trades Under 30 Seconds</Typography>
                         <TableContainer component={Paper}>
                             <Table size="small">
@@ -489,14 +542,22 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                                 </TableHead>
                                 <TableBody>
                                     {thirtySecondTrades.map((trade) => {
-                                        const duration = (trade.closeTime.getTime() - trade.openTime.getTime()) / 1000;
+                                        const duration =
+                                            (trade.closeTime.getTime() - trade.openTime.getTime()) /
+                                            1000;
                                         return (
                                             <TableRow key={trade.ticket}>
                                                 <TableCell>{trade.ticket}</TableCell>
-                                                <TableCell>{formatDate24GMT2(trade.openTime)}</TableCell>
-                                                <TableCell>{formatDate24GMT2(trade.closeTime)}</TableCell>
+                                                <TableCell>
+                                                    {formatDate24GMT2(trade.openTime)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {formatDate24GMT2(trade.closeTime)}
+                                                </TableCell>
                                                 <TableCell>{duration.toFixed(2)}</TableCell>
-                                                <TableCell align="right">${trade.amount.toFixed(2)}</TableCell>
+                                                <TableCell align="right">
+                                                    ${trade.amount.toFixed(2)}
+                                                </TableCell>
                                             </TableRow>
                                         );
                                     })}
@@ -504,24 +565,33 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                             </Table>
                         </TableContainer>
                         <Typography variant="subtitle1" sx={{ mt: 2 }}>
-                            Total Profit: ${thirtySecondTrades.reduce((acc, trade) => acc + trade.amount, 0).toFixed(2)}
+                            Total Profit: $
+                            {thirtySecondTrades
+                                .reduce((acc, trade) => acc + trade.amount, 0)
+                                .toFixed(2)}
                         </Typography>
-                    </Box>
+                    </Paper>
                 )}
 
+                {/* Additional Sections (allTrades, marginViolations, etc.) */}
                 {allTrades.length > 0 && (
                     <Box sx={{ mt: 4 }}>
                         <HedgeTrades trades={allTrades} />
                     </Box>
                 )}
 
-                {/* Display Margin Violations */}
                 {marginViolations.length > 0 && (
-                    <Box sx={{ mt: 4 }}>
+                    <Paper
+                        sx={{
+                            p: 2,
+                            mt: 4,
+                            borderRadius: '8px',
+                            backgroundColor: 'background.paper',
+                        }}
+                    >
                         <MarginUsage violations={marginViolations} />
-                    </Box>
+                    </Paper>
                 )}
-
             </Box>
         </ThemeProvider>
     );
@@ -532,10 +602,28 @@ const StatementParser = () => {
     const [file, setFile] = useState<File | null>(null);
     const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
     const [aggressiveAccount, setAggressiveAccount] = useState<boolean>(false);
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+
 
     useEffect(() => {
-        setAnalysisResult(null);
-    }, [file]);
+        const parseFile = async () => {
+            if (!file) return;
+            setIsLoading(true);
+            const result = await parseStatement(file, options, aggressiveAccount);
+            if (result?.error) {
+                console.error("Error parsing the file:", result.error);
+                setIsLoading(false);
+                return;
+            }
+            const statementNumber = extractStatementNumber(file.name);
+            if (result) {
+                setAnalysisResult({ ...result, statementNumber });
+            }
+            setIsLoading(false);
+        };
+
+        parseFile();
+    }, [file, options, aggressiveAccount]);
 
     const handleOptionsChange = (event: any) => {
         const { value } = event.target;
@@ -546,95 +634,76 @@ const StatementParser = () => {
         setAggressiveAccount(event.target.value === 'true');
     };
 
-    const handleParse = async () => {
-        if (!file) {
-            console.error("Please upload a file first.");
-            return;
-        }
-
-        try {
-            const result = await parseStatement(file, options, aggressiveAccount);
-            if (result?.error) {
-                console.error("Error parsing the file:", result.error);
-                return;
-            }
-            const statementNumber = extractStatementNumber(file.name);
-            if (result) {
-                setAnalysisResult({ ...result, statementNumber });
-            }
-        } catch {
-            console.error("Error during file parsing.");
-        }
-    };
-
     return (
         <ThemeProvider theme={darkTheme}>
-            <Box sx={{ mt: { xs: 7, sm: 8 }, px: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}>
-                    <Button
-                        component="label"
-                        variant="contained"
-                        startIcon={<CloudUploadIcon />}
-                        sx={{ minWidth: 180, height: 55, mt: 1 }}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}>
+                {/* Functions Selection as a Multiple Select with custom text color */}
+                <FormControl fullWidth sx={{ minWidth: 300, flexGrow: 1, mt: 2 }}>
+                    <InputLabel id="multiple-options" sx={{ color: 'secondary.main' }}>
+                        Select an option
+                    </InputLabel>
+                    <Select
+                        labelId="multiple-options"
+                        id="multiple-options"
+                        multiple
+                        value={options}
+                        onChange={handleOptionsChange}
+                        input={<OutlinedInput label="Options" />}
+                        sx={{
+                            '& .MuiSelect-select': { color: 'secondary.main' },
+                        }}
                     >
-                        Upload MT5
-                        <input
-                            type="file"
-                            hidden
-                            accept=".htm,.html"
-                            onChange={(e) => {
-                                if (e.target.files?.length) {
-                                    setFile(e.target.files[0]);
-                                }
-                            }}
-                        />
-                    </Button>
+                        {functions.map((option) => (
+                            <MenuItem key={option} value={option} sx={{ color: 'secondary.main' }}>
+                                {getFunctionIcon(option)}
+                                {option}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
 
-                    <FormControl fullWidth sx={{ minWidth: 300, flexGrow: 1, mt: 2 }}>
-                        <InputLabel id="multiple-options">Select an option</InputLabel>
-                        <Select
-                            labelId="multiple-options"
-                            id="multiple-options"
-                            multiple
-                            value={options}
-                            onChange={handleOptionsChange}
-                            input={<OutlinedInput label="Options" />}
-                            MenuProps={MenuProps}
-                        >
-                            {functions.map((option) => (
-                                <MenuItem key={option} value={option}>
-                                    {option}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
+                <FormControl component="fieldset" sx={{ minWidth: 200, flexGrow: 1, mt: 2 }}>
 
-                    <FormControl sx={{ minWidth: 200, flexGrow: 1, mt: 2 }}>
-                        <InputLabel htmlFor="aggressive-account">Account Type</InputLabel>
-                        <Select
-                            value={aggressiveAccount ? 'true' : 'false'}
-                            onChange={handleAggressiveChange}
-                            input={<OutlinedInput label="Account Type" />}
-                        >
-                            <MenuItem value="false">Normal</MenuItem>
-                            <MenuItem value="true">Aggressive</MenuItem>
-                        </Select>
-                    </FormControl>
-
-                    <Button
-                        variant="contained"
-                        sx={{ height: 55, mt: 1, minWidth: 120 }}
-                        onClick={handleParse}
+                    <RadioGroup
+                        row
+                        aria-label="account-type"
+                        name="account-type"
+                        value={aggressiveAccount ? 'true' : 'false'}
+                        onChange={handleAggressiveChange}
                     >
-                        Analyze
-                    </Button>
-                </Box>
-
-                {analysisResult && <TradingAnalysis result={analysisResult} />}
-
+                        <FormControlLabel value="false" control={<Radio />} label="Normal" />
+                        <FormControlLabel value="true" control={<Radio />} label="Aggressive" />
+                    </RadioGroup>
+                </FormControl>
             </Box>
+
+                {/* Drag & Drop Card for file upload */}
+                <DropZone onFileAccepted={(acceptedFile) => setFile(acceptedFile)} fileUploaded={!!file} />
+
+                {file && (
+                    <Box sx={{ mt: 2 }}>
+                        <Typography variant="subtitle1">File: {file.name}</Typography>
+                    </Box>
+                )}
+                {/* Loading Skeleton and Analysis Result with smooth transition */}
+                <Box sx={{ mt: 4 }}>
+
+                    <Fade in={isLoading} timeout={500} unmountOnExit>
+                        <Box>
+                            <Skeleton variant="rectangular" height={200} animation="wave" sx={{ mb: 2 }} />
+                            <Skeleton variant="text" height={40} animation="wave" />
+                            <Skeleton variant="text" height={40} animation="wave" />
+                        </Box>
+                    </Fade>
+                    <Fade in={!isLoading && !!analysisResult} timeout={500} unmountOnExit>
+                        <Box>
+                            {analysisResult && <TradingAnalysis result={analysisResult} />}
+                        </Box>
+                    </Fade>
+                </Box>
         </ThemeProvider>
     );
 };
+
 
 export default StatementParser;
