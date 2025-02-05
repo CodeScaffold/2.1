@@ -11,19 +11,17 @@ import {
     Paper,
 } from '@mui/material';
 import axios from 'axios';
-// import contractSizes from '../../../back/src/data/contractSizes.json';
-// import leverages from '../../../back/src/data/leverages.json';
 import { contractSizes, leverages } from '../../../back/src/data/constants';
-
-
 
 interface Trade {
     ticket: string;
     pair?: string;
     lotSize: number;
     openPrice: number;
+    closeTime: Date;
     openTime: Date;
     amount: number; // Represents profit
+    marginUseAmount : number;
 }
 
 interface NewsEvent {
@@ -101,17 +99,6 @@ const MarginUsage: React.FC<MarginUsageProps> = ({ violations = [] }) => {
 
         const baseCurrency = pairKey.slice(0, 3);
         const quoteCurrency = pairKey.slice(3, 6);
-
-        // // Handle USDJPY specifically
-        // if (pairKey === 'USDJPY') {
-        //     // Formula: (lotSize * openPrice * contractSize) / leverage * exchangeRate
-        //     const marginInJPY = (trade.lotSize * trade.openPrice * contractSize) / leverage;
-        //     const exchangeRate = exchangeRates['USDJPY'] || 0.00644; // Default to 0.00644 if not found
-        //     return marginInJPY * exchangeRate;
-        // }
-
-        // Handle XAUUSD normally (leave it unchanged)
-        // XAUUSD is already handled in standard calculations
         const baseUSDPair = `${baseCurrency}USD`;
         const quoteUSDPair = `${quoteCurrency}USD`;
 
@@ -127,62 +114,71 @@ const MarginUsage: React.FC<MarginUsageProps> = ({ violations = [] }) => {
             // Quote is USD
             return  ((contractSize * trade.lotSize * trade.openPrice) / leverage) * exchangeRate;
         } else {
-
-
-            // will be commented soon bitch
-            const baseUSDPair = `${baseCurrency}USD`;
-            const quoteUSDPair = `${quoteCurrency}USD`;
-
-            const baseUSD = exchangeRates[baseUSDPair];
-            const quoteUSD = exchangeRates[quoteUSDPair];
-
-            if (!baseUSD || !quoteUSD) {
-                console.warn(`Missing USD pair rates for ${pairKey}. Trade Ticket: ${trade.ticket}`);
-                return 0;
-            }
-
-            const exchangeRate = baseUSD / quoteUSD; // e.g., EURGBP = EURUSD / GBPUSD
-
-            return ((contractSize * trade.lotSize * trade.openPrice) / leverage) * exchangeRate;
+            return 0;
         }
     };
+/**
+* Processes violations to calculate total margin used per unique ticket.
+    */
+const processViolations = useMemo(() => {
+    const usedTickets = new Set<string>(); // Initialize a Set to track used tickets
 
-    /**
-     * Processes violations to calculate total margin used.
-     */
-    const processViolations = useMemo(() => {
-        const seenTickets = new Set<string>();
+    return violations.reduce<MarginViolation[]>((acc, violation) => {
+        const { newsEvent, trades } = violation;
+        const newsCurrency = newsEvent.currency.toUpperCase();
 
-        return violations
-            .map((violation) => {
-                const { newsEvent, trades} = violation;
-                const newsCurrency = newsEvent.currency.toUpperCase();
+        // Filter relevant trades based on the news currency
+        const relevantTrades = trades.filter(trade => {
+            if (!trade.pair) return false;
+            const pair = trade.pair.toUpperCase();
+            const base = pair.slice(0, 3);
+            const quote = pair.slice(3, 6);
+            return base === newsCurrency || quote === newsCurrency;
+        });
 
-                // Filter relevant trades
-                const relevantTrades = trades.filter(trade => {
-                    if (!trade.pair) return false;
-                    const pair = trade.pair.toUpperCase();
-                    const base = pair.slice(0, 3);
-                    const quote = pair.slice(3, 6);
-                    return base === newsCurrency || quote === newsCurrency;
+        // Further filter out trades with tickets that have already been used
+        const uniqueTrades = relevantTrades.filter(trade => {
+            if (usedTickets.has(trade.ticket)) {
+                return false; // Exclude if ticket is already used
+            }
+            return true; // Include if ticket is unique
+        });
+
+        // Aggregate margin by unique ticket within the current violation
+        const marginByTicket: { [ticket: string]: number } = {};
+
+        uniqueTrades.forEach(trade => {
+            const margin = calculateMargin(trade);
+            if (marginByTicket[trade.ticket]) {
+                marginByTicket[trade.ticket] += margin;
+            } else {
+                marginByTicket[trade.ticket] = margin;
+            }
+        });
+
+        // Convert aggregated margins back to trade objects with unique tickets
+        const aggregatedTrades: Trade[] = [];
+        uniqueTrades.forEach(trade => {
+            if (!aggregatedTrades.find(t => t.ticket === trade.ticket)) {
+                aggregatedTrades.push({
+                    ...trade,
+                    marginUseAmount: marginByTicket[trade.ticket], // Store total margin used
                 });
+                usedTickets.add(trade.ticket); // Mark ticket as used
+            }
+        });
 
-                // Calculate total margin
-                const totalMarginUsed = relevantTrades.reduce((sum, trade) => sum + calculateMargin(trade), 0);
+        // Calculate total margin used for this violation
+        const totalMarginUsed = Object.values(marginByTicket).reduce((sum, margin) => sum + margin, 0);
 
-                // Filter profitable and unique trades
-                const profitableTrades = relevantTrades.filter(trade => {
-                    if (trade.amount > 0 && !seenTickets.has(trade.ticket)) {
-                        seenTickets.add(trade.ticket);
-                        return true;
-                    }
-                    return false;
-                });
+        // Only include the violation if it meets the threshold and has unique trades
+        if (aggregatedTrades.length > 0 && totalMarginUsed >= violation.threshold) {
+            acc.push({ ...violation, trades: aggregatedTrades, totalMarginUsed });
+        }
 
-                return { ...violation, trades: profitableTrades, totalMarginUsed };
-            })
-            .filter(v => v.trades.length > 0 && v.totalMarginUsed >= v.threshold);
-    }, [violations, exchangeRates]);
+        return acc;
+    }, []);
+}, [violations, exchangeRates]);
 
     if (loading) {
         return (
@@ -225,9 +221,10 @@ const MarginUsage: React.FC<MarginUsageProps> = ({ violations = [] }) => {
                                     <TableCell>Pair</TableCell>
                                     <TableCell>Lot Size</TableCell>
                                     <TableCell>Open Price</TableCell>
-                                    <TableCell>Profit</TableCell>
+                                    <TableCell>Margin (USD)</TableCell>
                                     <TableCell>Open Time</TableCell>
-                                    <TableCell align="right">Margin (USD)</TableCell>
+                                    <TableCell>Close Time</TableCell>
+                                    <TableCell align="right">Profit</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -237,12 +234,13 @@ const MarginUsage: React.FC<MarginUsageProps> = ({ violations = [] }) => {
                                         <TableCell>{trade.pair || 'N/A'}</TableCell>
                                         <TableCell>{trade.lotSize}</TableCell>
                                         <TableCell>{trade.openPrice}</TableCell>
-                                        <TableCell sx={{ color: 'green' }}>
-                                            ${trade.amount.toFixed(2)}
+                                        <TableCell sx={{ color: 'red' }}>
+                                            ${calculateMargin(trade).toFixed(2)}
                                         </TableCell>
                                         <TableCell>{formatDate(trade.openTime)}</TableCell>
+                                        <TableCell>{formatDate(trade.closeTime)}</TableCell>
                                         <TableCell align="right">
-                                            ${calculateMargin(trade).toFixed(2)}
+                                            ${trade.amount.toFixed(2)}
                                         </TableCell>
                                     </TableRow>
                                 ))}
