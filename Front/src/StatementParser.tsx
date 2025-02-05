@@ -4,9 +4,7 @@ import {
     TableHead, TableRow, Paper, Typography, FormControl, InputLabel,
     Select, MenuItem, OutlinedInput,
 } from '@mui/material';
-// import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import { styled } from '@mui/material/styles';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import {createTheme, ThemeProvider} from '@mui/material/styles';
 import HedgeTrades from './components/HedgeTrades';
 import MarginUsage from './components/MarginUsage';
 import highImpactNews from '../../back/src/data/high_impact_news.json';
@@ -18,6 +16,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+
 
 
 const contractSizes: Record<string, number> = contractSizesData as Record<string, number>;
@@ -82,6 +81,11 @@ interface AnalysisResult {
     marginViolations?: MarginViolation[];
 }
 
+const darkTheme = createTheme({
+    palette: {
+        mode: 'dark',
+    },
+});
 
 const ITEM_HEIGHT = 48;
 const ITEM_PADDING_TOP = 8;
@@ -415,24 +419,14 @@ const getFunctionIcon = (option: string) => {
             return null;
     }
 };
-const darkTheme = createTheme({
-    palette: {
-        mode: 'dark',
-        primary: { main: '#3f51b5' },
-        secondary: { main: '#007bff' },
-        background: { default: '#212121', paper: '#292929' },
-        text: { primary: '#eee', secondary: '#ddd' },
-    },
-});
 
-const StyledTable = styled(TableContainer)(({ theme }) => ({
-    backgroundColor: theme.palette.background.paper,
-}));
+
 
 const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
     if (!result) return null;
     const {
         statementNumber,
+        initialBalance,
         profitTarget = 0,
         maxAllowedProfit = 0,
         violations = [],
@@ -455,19 +449,23 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
     }
 
     return (
-        <ThemeProvider theme={darkTheme}>
+
             <Box sx={{ mt: 4 }}>
                 {(profitTarget > 0 || maxAllowedProfit > 0) && (
+
                     <Paper
                         sx={{
-                            p: 3,
-                            mb: 3,
+                            p: 2,
+                            mb: 2,
                             borderRadius: '8px',
-                            backgroundColor: 'background.default',
+                            backgroundColor: 'background.paper',
                         }}
                     >
                         <Typography variant="h6" color="primary">
                             Statement #: {statementNumber ?? 'Unknown'}
+                        </Typography>
+                        <Typography variant="body1" color="success">
+                            Initial Balance: {initialBalance ?? 'Unknown'}
                         </Typography>
                         <Typography variant="body1">
                             Profit Target: ${profitTarget.toFixed(2)}
@@ -488,11 +486,11 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                             backgroundColor: 'background.paper',
                         }}
                     >
-                        <Typography variant="subtitle1">
+                        <Typography variant="h6" color="error">
                             Chained Group #{index + 1} - Total Profit: $
                             {chainedGroup.totalProfit.toFixed(2)}
                         </Typography>
-                        <StyledTable>
+
                             <Table size="small">
                                 <TableHead>
                                     <TableRow>
@@ -515,7 +513,7 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                                     ))}
                                 </TableBody>
                             </Table>
-                        </StyledTable>
+
                     </Paper>
                 ))}
                 {/* Trades Under 30 Seconds Section */}
@@ -528,8 +526,8 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                             backgroundColor: 'background.paper',
                         }}
                     >
-                        <Typography variant="h6">Trades Under 30 Seconds</Typography>
-                        <TableContainer component={Paper}>
+                        <Typography variant="h6" color="error">Trades Under 30 Seconds</Typography>
+                        <TableContainer component={Paper} sx={{ mt: 1 }}>
                             <Table size="small">
                                 <TableHead>
                                     <TableRow>
@@ -593,7 +591,6 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                     </Paper>
                 )}
             </Box>
-        </ThemeProvider>
     );
 };
 
@@ -652,6 +649,7 @@ const StatementParser = () => {
                         sx={{
                             '& .MuiSelect-select': { color: 'secondary.main' },
                         }}
+                        MenuProps={MenuProps}
                     >
                         {functions.map((option) => (
                             <MenuItem key={option} value={option} sx={{ color: 'secondary.main' }}>
@@ -677,33 +675,32 @@ const StatementParser = () => {
                 </FormControl>
             </Box>
 
-                {/* Drag & Drop Card for file upload */}
-                <DropZone onFileAccepted={(acceptedFile) => setFile(acceptedFile)} fileUploaded={!!file} />
+            {/* Drag & Drop Card for file upload */}
+            <DropZone onFileAccepted={(acceptedFile) => setFile(acceptedFile)} fileUploaded={!!file} />
 
-                {file && (
-                    <Box sx={{ mt: 2 }}>
-                        <Typography variant="subtitle1">File: {file.name}</Typography>
-                    </Box>
-                )}
-                {/* Loading Skeleton and Analysis Result with smooth transition */}
-                <Box sx={{ mt: 4 }}>
-
-                    <Fade in={isLoading} timeout={500} unmountOnExit>
-                        <Box>
-                            <Skeleton variant="rectangular" height={200} animation="wave" sx={{ mb: 2 }} />
-                            <Skeleton variant="text" height={40} animation="wave" />
-                            <Skeleton variant="text" height={40} animation="wave" />
-                        </Box>
-                    </Fade>
-                    <Fade in={!isLoading && !!analysisResult} timeout={500} unmountOnExit>
-                        <Box>
-                            {analysisResult && <TradingAnalysis result={analysisResult} />}
-                        </Box>
-                    </Fade>
+            {file && (
+                <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle1">File: {file.name}</Typography>
                 </Box>
+            )}
+            {/* Loading Skeleton and Analysis Result with smooth transition */}
+            <Box sx={{ mt: 4 }}>
+
+                <Fade in={isLoading} timeout={500} unmountOnExit>
+                    <Box>
+                        <Skeleton variant="rectangular" height={200} animation="wave" sx={{ mb: 2 }} />
+                        <Skeleton variant="text" height={40} animation="wave" />
+                        <Skeleton variant="text" height={40} animation="wave" />
+                    </Box>
+                </Fade>
+                <Fade in={!isLoading && !!analysisResult} timeout={500} unmountOnExit>
+                    <Box>
+                        {analysisResult && <TradingAnalysis result={analysisResult} />}
+                    </Box>
+                </Fade>
+            </Box>
         </ThemeProvider>
     );
 };
-
 
 export default StatementParser;
