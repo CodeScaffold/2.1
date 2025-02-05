@@ -117,68 +117,68 @@ const MarginUsage: React.FC<MarginUsageProps> = ({ violations = [] }) => {
             return 0;
         }
     };
-/**
-* Processes violations to calculate total margin used per unique ticket.
-    */
-const processViolations = useMemo(() => {
-    const usedTickets = new Set<string>(); // Initialize a Set to track used tickets
+    /**
+     * Processes violations to calculate total margin used per unique ticket.
+     */
+    const processViolations = useMemo(() => {
+        const usedTickets = new Set<string>(); // Initialize a Set to track used tickets
 
-    return violations.reduce<MarginViolation[]>((acc, violation) => {
-        const { newsEvent, trades } = violation;
-        const newsCurrency = newsEvent.currency.toUpperCase();
+        return violations.reduce<MarginViolation[]>((acc, violation) => {
+            const { newsEvent, trades } = violation;
+            const newsCurrency = newsEvent.currency.toUpperCase();
 
-        // Filter relevant trades based on the news currency
-        const relevantTrades = trades.filter(trade => {
-            if (!trade.pair) return false;
-            const pair = trade.pair.toUpperCase();
-            const base = pair.slice(0, 3);
-            const quote = pair.slice(3, 6);
-            return base === newsCurrency || quote === newsCurrency;
-        });
+            // Filter relevant trades based on the news currency
+            const relevantTrades = trades.filter(trade => {
+                if (!trade.pair) return false;
+                const pair = trade.pair.toUpperCase();
+                const base = pair.slice(0, 3);
+                const quote = pair.slice(3, 6);
+                return base === newsCurrency || quote === newsCurrency;
+            });
 
-        // Further filter out trades with tickets that have already been used
-        const uniqueTrades = relevantTrades.filter(trade => {
-            if (usedTickets.has(trade.ticket)) {
-                return false; // Exclude if ticket is already used
+            // Further filter out trades with tickets that have already been used
+            const uniqueTrades = relevantTrades.filter(trade => {
+                if (usedTickets.has(trade.ticket)) {
+                    return false; // Exclude if ticket is already used
+                }
+                return true; // Include if ticket is unique
+            });
+
+            // Aggregate margin by unique ticket within the current violation
+            const marginByTicket: { [ticket: string]: number } = {};
+
+            uniqueTrades.forEach(trade => {
+                const margin = calculateMargin(trade);
+                if (marginByTicket[trade.ticket]) {
+                    marginByTicket[trade.ticket] += margin;
+                } else {
+                    marginByTicket[trade.ticket] = margin;
+                }
+            });
+
+            // Convert aggregated margins back to trade objects with unique tickets
+            const aggregatedTrades: Trade[] = [];
+            uniqueTrades.forEach(trade => {
+                if (!aggregatedTrades.find(t => t.ticket === trade.ticket)) {
+                    aggregatedTrades.push({
+                        ...trade,
+                        marginUseAmount: marginByTicket[trade.ticket], // Store total margin used
+                    });
+                    usedTickets.add(trade.ticket); // Mark ticket as used
+                }
+            });
+
+            // Calculate total margin used for this violation
+            const totalMarginUsed = Object.values(marginByTicket).reduce((sum, margin) => sum + margin, 0);
+
+            // Only include the violation if it meets the threshold and has unique trades
+            if (aggregatedTrades.length > 0 && totalMarginUsed >= violation.threshold) {
+                acc.push({ ...violation, trades: aggregatedTrades, totalMarginUsed });
             }
-            return true; // Include if ticket is unique
-        });
 
-        // Aggregate margin by unique ticket within the current violation
-        const marginByTicket: { [ticket: string]: number } = {};
-
-        uniqueTrades.forEach(trade => {
-            const margin = calculateMargin(trade);
-            if (marginByTicket[trade.ticket]) {
-                marginByTicket[trade.ticket] += margin;
-            } else {
-                marginByTicket[trade.ticket] = margin;
-            }
-        });
-
-        // Convert aggregated margins back to trade objects with unique tickets
-        const aggregatedTrades: Trade[] = [];
-        uniqueTrades.forEach(trade => {
-            if (!aggregatedTrades.find(t => t.ticket === trade.ticket)) {
-                aggregatedTrades.push({
-                    ...trade,
-                    marginUseAmount: marginByTicket[trade.ticket], // Store total margin used
-                });
-                usedTickets.add(trade.ticket); // Mark ticket as used
-            }
-        });
-
-        // Calculate total margin used for this violation
-        const totalMarginUsed = Object.values(marginByTicket).reduce((sum, margin) => sum + margin, 0);
-
-        // Only include the violation if it meets the threshold and has unique trades
-        if (aggregatedTrades.length > 0 && totalMarginUsed >= violation.threshold) {
-            acc.push({ ...violation, trades: aggregatedTrades, totalMarginUsed });
-        }
-
-        return acc;
-    }, []);
-}, [violations, exchangeRates]);
+            return acc;
+        }, []);
+    }, [violations, exchangeRates]);
 
     if (loading) {
         return (
@@ -221,10 +221,10 @@ const processViolations = useMemo(() => {
                                     <TableCell>Pair</TableCell>
                                     <TableCell>Lot Size</TableCell>
                                     <TableCell>Open Price</TableCell>
-                                    <TableCell>Margin (USD)</TableCell>
+                                    <TableCell >Profit</TableCell>
                                     <TableCell>Open Time</TableCell>
                                     <TableCell>Close Time</TableCell>
-                                    <TableCell align="right">Profit</TableCell>
+                                    <TableCell align="right">Margin (USD)</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
@@ -234,13 +234,14 @@ const processViolations = useMemo(() => {
                                         <TableCell>{trade.pair || 'N/A'}</TableCell>
                                         <TableCell>{trade.lotSize}</TableCell>
                                         <TableCell>{trade.openPrice}</TableCell>
-                                        <TableCell sx={{ color: 'red' }}>
-                                            ${calculateMargin(trade).toFixed(2)}
+                                        <TableCell sx={{ color: 'green' }}>
+                                            ${trade.amount.toFixed(2)}
                                         </TableCell>
                                         <TableCell>{formatDate(trade.openTime)}</TableCell>
                                         <TableCell>{formatDate(trade.closeTime)}</TableCell>
-                                        <TableCell align="right">
-                                            ${trade.amount.toFixed(2)}
+
+                                        <TableCell sx={{ color: 'red' }} align="right">
+                                            ${calculateMargin(trade).toFixed(2)}
                                         </TableCell>
                                     </TableRow>
                                 ))}
