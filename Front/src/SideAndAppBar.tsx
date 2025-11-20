@@ -15,11 +15,8 @@ import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import { useState, useEffect } from 'react';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import Brightness4Icon from '@mui/icons-material/Brightness4';
-import Brightness7Icon from '@mui/icons-material/Brightness7';
-import {Archive, Logout} from "@mui/icons-material";
+import { useState } from 'react';
+import { Archive, Logout } from "@mui/icons-material";
 import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
 import ArchiveIcon from '@mui/icons-material/Archive';
 import Filter1Icon from '@mui/icons-material/Filter1';
@@ -30,7 +27,6 @@ import StatementParser from "./StatementParser.tsx";
 import ResultTable from "../src/components/ResultTable.tsx";
 import { Route, Routes, useNavigate } from 'react-router-dom';
 import InputSection from '../src/components/InputSection.tsx';
-
 
 const drawerWidth = 240;
 
@@ -102,45 +98,13 @@ const Drawer = styled(MuiDrawer, {
     }),
 }));
 
+
+
 export default function MiniDrawer() {
-    const [darkMode, setDarkMode] = useState(() => {
-        // Check for saved mode in localStorage
-        const savedMode = localStorage.getItem('darkMode');
-        return savedMode === 'true';
-    });
-
-    // Persist dark mode in localStorage
-    useEffect(() => {
-        localStorage.setItem('darkMode', darkMode.toString());
-    }, [darkMode]);
-
-    const handleLogout = () => {
-        // Clear authentication
-        localStorage.removeItem('isAuthenticated');
-
-        // Redirect to SignIn page
-        navigate('/signIn');
-    };
-
-    const lightTheme = createTheme({
-        palette: {
-            mode: 'light',
-        },
-    });
-
-    const darkTheme = createTheme({
-        palette: {
-            mode: 'dark',
-        },
-    });
-
-    const handleThemeChange = () => {
-        setDarkMode(!darkMode);
-    };
-
-    const theme = useTheme();
+    // Remove dark mode state and toggle logic
     const [open, setOpen] = useState(false);
     const navigate = useNavigate();
+    const theme = useTheme();
 
     const CompensationPage = () => (
         <div>
@@ -157,119 +121,120 @@ export default function MiniDrawer() {
         setOpen(false);
     };
 
+    const handleLogout = () => {
+        // Clear authentication and redirect to SignIn page
+        localStorage.removeItem('isAuthenticated');
+        navigate('/signIn');
+    };
+
     return (
-        <ThemeProvider theme={darkMode ? darkTheme : lightTheme}>
+
             <Box sx={{ display: 'flex' }}>
-            <CssBaseline />
-            <AppBar position="fixed" open={open}>
-                <Toolbar>
-                    <IconButton
-                        color="inherit"
-                        aria-label="open drawer"
-                        onClick={handleDrawerOpen}
-                        edge="start"
-                        sx={{ marginRight: 5, ...(open && { display: 'none' }) }}
-                    >
-                        <MenuIcon />
-                    </IconButton>
+                <CssBaseline />
+                <AppBar position="fixed" open={open}>
+                    <Toolbar>
+                        <IconButton
+                            color="inherit"
+                            aria-label="open drawer"
+                            onClick={handleDrawerOpen}
+                            edge="start"
+                            sx={{ marginRight: 5, ...(open && { display: 'none' }) }}
+                        >
+                            <MenuIcon />
+                        </IconButton>
 
-                    <Typography variant="h6" noWrap component="div" sx={{flexGrow: 1}}>
-                        <img
-                            src="/logo.webp"
-                            alt="Logo"
-                            onClick={() => navigate("/")}
-                            style={{marginRight: 60, height: "60px",marginTop:"10px", cursor: "pointer"}}
-                        />
-                    </Typography>
-                    <Typography variant="h6" noWrap component="div" sx={{flexGrow: 1}}>
-                        <img
-                            src="/forfx%20logo.svg"
-                            alt="forfxLogo"
-                            onClick={() => navigate("/")}
-                            style={{marginRight: 1050, height: "40px",marginTop:"10px", cursor: "pointer"}}
-                        />
-                    </Typography>
-
-                    {/* Night mode toggle icon */}
-                    <IconButton onClick={handleThemeChange} color="inherit">
-                        {darkMode ? <Brightness7Icon/> : <Brightness4Icon />}
-                    </IconButton>
-                </Toolbar>
-            </AppBar>
-            <Drawer variant="permanent" open={open}>
-                <DrawerHeader>
-                    <IconButton onClick={handleDrawerClose}>
-                        {theme.direction === 'rtl' ? <ChevronRightIcon /> : <ChevronLeftIcon />}
-                    </IconButton>
-                </DrawerHeader>
-                <Divider />
-                <List>
-                    {['Compensation', 'Archive'].map((text, index) => (
-                        <ListItem key={text} disablePadding sx={{ display: "block" }}>
-                            <ListItemButton
-                                sx={{
-                                    minHeight: 48,
-                                    justifyContent: open ? "initial" : "center",
-                                    px: 2.5,
-                                }}
-                                onClick={() => navigate(index === 0 ? "/compensation" : "/archive")}
-                            >
-                                <ListItemIcon
+                        <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+                            <img
+                                src="/logo.webp"
+                                alt="Logo"
+                                onClick={() => navigate("/")}
+                                style={{ marginRight: 60, height: "60px", marginTop: "10px", cursor: "pointer" }}
+                            />
+                        </Typography>
+                        <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
+                            <img
+                                src="/forfx%20logo.svg"
+                                alt="forfxLogo"
+                                onClick={() => navigate("/")}
+                                style={{ marginRight: 1050, height: "40px", marginTop: "10px", cursor: "pointer" }}
+                            />
+                        </Typography>
+                        {/* Removed dark mode toggle button */}
+                    </Toolbar>
+                </AppBar>
+                <Drawer variant="permanent" open={open}>
+                    <DrawerHeader>
+                        <IconButton onClick={handleDrawerClose}>
+                            {theme.direction === 'rtl' ? <ChevronRightIcon /> : <ChevronLeftIcon />}
+                        </IconButton>
+                    </DrawerHeader>
+                    <Divider />
+                    <List>
+                        {['Compensation', 'Archive'].map((text, index) => (
+                            <ListItem key={text} disablePadding sx={{ display: "block" }}>
+                                <ListItemButton
                                     sx={{
-                                        minWidth: 0,
-                                        mr: open ? 3 : "auto",
-                                        justifyContent: "center",
+                                        minHeight: 48,
+                                        justifyContent: open ? "initial" : "center",
+                                        px: 2.5,
+                                    }}
+                                    onClick={() => navigate(index === 0 ? "/compensation" : "/archive")}
+                                >
+                                    <ListItemIcon
+                                        sx={{
+                                            minWidth: 0,
+                                            mr: open ? 3 : "auto",
+                                            justifyContent: "center",
+                                        }}
+                                    >
+                                        {index % 2 === 0 ? <CurrencyExchangeIcon /> : <ArchiveIcon />}
+                                    </ListItemIcon>
+                                    <ListItemText primary={text} sx={{ opacity: open ? 1 : 0 }} />
+                                </ListItemButton>
+                            </ListItem>
+                        ))}
+                    </List>
+                    <Divider />
+                    <List>
+                        {['Phase 1', 'Phase 2', 'Funded', 'History'].map((text, index) => (
+                            <ListItem key={text} disablePadding sx={{ display: 'block' }}>
+                                <ListItemButton
+                                    sx={{
+                                        minHeight: 48,
+                                        justifyContent: open ? 'initial' : 'center',
+                                        px: 2.5,
+                                    }}
+                                    onClick={() => {
+                                        if (index === 0) navigate('/phase1');
+                                        else if (index === 1) navigate('/phase2');
+                                        // Add navigation for 'Funded' and 'History' if needed
                                     }}
                                 >
-                                    {index % 2 === 0 ? <CurrencyExchangeIcon /> : <ArchiveIcon />}
-                                </ListItemIcon>
-                                <ListItemText primary={text} sx={{ opacity: open ? 1 : 0 }} />
-                            </ListItemButton>
-                        </ListItem>
-                    ))}
-                </List>
-                <Divider />
-                <List>
-                    {['Phase 1', 'Phase 2', 'Funded', 'History'].map((text, index) => (
-                        <ListItem key={text} disablePadding sx={{ display: 'block' }}>
-                            <ListItemButton
-                                sx={{
-                                    minHeight: 48,
-                                    justifyContent: open ? 'initial' : 'center',
-                                    px: 2.5,
-                                }}
-                                onClick={() => {
-                                    if (index === 0) navigate('/phase1');
-                                    else if (index === 1) navigate('/phase2');
-                                    // Add navigation for 'Funded' and 'History' if needed
-                                }}
-                            >
-                                <ListItemIcon
-                                    sx={{
-                                        minWidth: 0,
-                                        mr: open ? 3 : 'auto',
-                                        justifyContent: 'center',
-                                    }}
-                                >
-                                    {/* Conditional rendering of icons based on the index */}
-                                    {index === 0 && <Filter1Icon />}
-                                    {index === 1 && <Filter2Icon />}
-                                    {index === 2 && <AttachMoneyIcon />}
-                                    {index === 3 && <HistoryIcon />}
-                                </ListItemIcon>
-                                <ListItemText primary={text} sx={{ opacity: open ? 1 : 0 }} />
-                            </ListItemButton>
-                        </ListItem>
-                    ))}
-                </List>
-                <Divider />
-                <ListItemButton onClick={handleLogout}>
-                    <ListItemIcon>
-                        <Logout />
-                    </ListItemIcon>
-                    <ListItemText primary="Logout" />
-                </ListItemButton>
-            </Drawer>
+                                    <ListItemIcon
+                                        sx={{
+                                            minWidth: 0,
+                                            mr: open ? 3 : 'auto',
+                                            justifyContent: 'center',
+                                        }}
+                                    >
+                                        {index === 0 && <Filter1Icon />}
+                                        {index === 1 && <Filter2Icon />}
+                                        {index === 2 && <AttachMoneyIcon />}
+                                        {index === 3 && <HistoryIcon />}
+                                    </ListItemIcon>
+                                    <ListItemText primary={text} sx={{ opacity: open ? 1 : 0 }} />
+                                </ListItemButton>
+                            </ListItem>
+                        ))}
+                    </List>
+                    <Divider />
+                    <ListItemButton onClick={handleLogout}>
+                        <ListItemIcon>
+                            <Logout />
+                        </ListItemIcon>
+                        <ListItemText primary="Logout" />
+                    </ListItemButton>
+                </Drawer>
                 <Box
                     component="main"
                     sx={{
@@ -284,13 +249,13 @@ export default function MiniDrawer() {
                     <DrawerHeader />
                     <Routes>
                         <Route path="/compensation" element={<CompensationPage />} />
-                        <Route path="/Archive" element={<Archive />} />
+                        <Route path="/archive" element={<Archive />} />
                         <Route path="/phase1" element={<StatementParser />} />
                         <Route path="/phase2" element={<StatementParser />} />
                         {/* Add more routes as needed */}
                     </Routes>
                 </Box>
             </Box>
-        </ThemeProvider>
+
     );
 }

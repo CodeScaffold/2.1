@@ -6,7 +6,16 @@ import Box from '@mui/material/Box';
 import { useState } from 'react';
 import Archive from "./components/Archive";
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import ErrorBoundary from './utils/ErrorBoundary';
+import { ThemeProvider } from "@emotion/react";
+import {createTheme} from "@mui/material/styles";
 
+
+const darkTheme = createTheme({
+    palette: {
+        mode: 'dark',
+    },
+});
 
 function App() {
     const [isAuthenticated, setIsAuthenticated] = useState(localStorage.getItem('isAuthenticated') === 'true');
@@ -21,6 +30,8 @@ function App() {
     const queryClient = new QueryClient();
 
     return (
+        <ThemeProvider theme={darkTheme}>
+        <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
         <Router>
             <Routes>
@@ -47,6 +58,8 @@ function App() {
             </Routes>
         </Router>
         </QueryClientProvider>
+            </ErrorBoundary>
+        </ThemeProvider>
     );
 }
 

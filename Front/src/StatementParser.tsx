@@ -1,13 +1,25 @@
 import { useEffect, useState } from 'react';
 import {
-    Box, Button, Table, TableBody, TableCell, TableContainer,
+    Box, Skeleton, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, Paper, Typography, FormControl, InputLabel,
     Select, MenuItem, OutlinedInput,
 } from '@mui/material';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import { styled } from '@mui/material/styles';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
+import {createTheme, ThemeProvider} from '@mui/material/styles';
 import HedgeTrades from './components/HedgeTrades';
+import MarginUsage from './components/MarginUsage';
+import highImpactNews from '../../back/src/data/high_impact_news.json';
+import contractSizesData from '../../back/src/data/contractSizes.json';
+import DropZone from './components/dropZone.tsx';
+import Fade from '@mui/material/Fade';
+import { Radio, RadioGroup, FormControlLabel } from '@mui/material';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+
+
+
+const contractSizes: Record<string, number> = contractSizesData as Record<string, number>;
 
 interface Trade {
     ticket: string;
@@ -17,20 +29,41 @@ interface Trade {
     pair?: string;
     positionType: string;
     duration: number;
+    openPrice: number;
+    lotSize: number;
 }
-/**
- * Extended trade with the fields HedgeTrades needs
- * including 24h "ForexFactory-style" date/time
- */
+
+
 interface ExtendedTrade extends Trade {
     direction: string; // e.g. "BUY" or "SELL"
     instrument: string; // e.g. "EURUSD"
     ffDate: string;     // e.g. "Apr 18 2024"
     ffTime: string;     // e.g. "03:30"
 }
+
 interface ChainViolation {
     trades: Trade[];
     totalProfit: number;
+}
+
+interface HedgedGroup {
+    trades: Trade[];
+    totalProfit: number;
+}
+
+interface NewsEvent {
+    date: string;
+    time: string;
+    currency: string;
+    event: string;
+    impact: string;
+}
+
+interface MarginViolation {
+    newsEvent: NewsEvent;
+    trades: Trade[];
+    totalMarginUsed: number;
+    threshold: number;
 }
 
 interface AnalysisResult {
@@ -44,9 +77,16 @@ interface AnalysisResult {
     thirtySecondTrades?: Trade[];
     newsHedgeTrades?: Trade[];
     statementNumber?: string | number;
+    marginUsageGroups?: HedgedGroup[];
+    marginViolations?: MarginViolation[];
 }
 
-// Menu props for multi-select
+const darkTheme = createTheme({
+    palette: {
+        mode: 'dark',
+    },
+});
+
 const ITEM_HEIGHT = 48;
 const ITEM_PADDING_TOP = 8;
 const MenuProps = {
@@ -59,47 +99,112 @@ const MenuProps = {
 };
 
 const functions = [
-    '30-second-trades',
-    'News hedging',
-    '80% profit target',
-    '50% Margin Usage in news',
+    '30-second',
+    'hedging',
+    '80% profit',
+    '50% Margin',
 ];
 
 const PROFIT_LIMIT_PERCENTAGE = 0.8;
 
+const LEVERAGE = 50;
+const MARGIN_THRESHOLD_PERCENTAGE = 0.5; // 50%
+const WINDOW_MINUTES = 30;
+
 function toForexFactoryDateTime(date: Date): { ffDate: string; ffTime: string } {
-    // Adjust the date by adding 2 hours for GMT+2
-    const adjustedDate = new Date(date.getTime() + 2 * 60 * 60 * 1000);
-    const shortMonth = adjustedDate.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
-    const day = adjustedDate.getUTCDate();
-    const year = adjustedDate.getUTCFullYear();
-    const hours = String(adjustedDate.getUTCHours()).padStart(2, '0');
-    const minutes = String(adjustedDate.getUTCMinutes()).padStart(2, '0');
+    const shortMonth = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+    const day = date.getUTCDate();
+    const year = date.getUTCFullYear();
+    const hours = String(date.getUTCHours()).padStart(2, '0');
+    const minutes = String(date.getUTCMinutes()).padStart(2, '0');
     return {
-        ffDate: `${shortMonth} ${day} ${year}`, // e.g. "Jan 2 2025"
-        ffTime: `${hours}:${minutes}`,          // e.g. "16:30"
+        ffDate: `${shortMonth} ${day} ${year}`,
+        ffTime: `${hours}:${minutes}`,
     };
 }
 
 const getProfitTarget = (accountBalance: number, aggressive: boolean): number => {
-    if (isNaN(accountBalance) || accountBalance <= 0) {
-        console.error("Invalid account balance.");
-        return 0;
-    }
-    // If “aggressive” is true, 20% target; otherwise 10%.
     return aggressive ? accountBalance * 0.2 : accountBalance * 0.1;
 };
 
-/**
- * Identifies chain violations (80% profit cap) if "80% profit target" was selected.
- */
+function parseNewsDateTime(news: NewsEvent): Date {
+    const dateTimeString = `${news.date} ${news.time} GMT+0200`;
+    return new Date(dateTimeString);
+}
+
+
+function calculateMarginViolations(trades: Trade[], initialBalance: number): MarginViolation[] {
+    const violations: MarginViolation[] = [];
+
+    highImpactNews.forEach((news: NewsEvent) => {
+        const newsDateTime = parseNewsDateTime(news);
+        const windowStart = new Date(newsDateTime.getTime() - WINDOW_MINUTES * 60 * 1000);
+        const windowEnd = new Date(newsDateTime.getTime() + WINDOW_MINUTES * 60 * 1000);
+
+        const tradesInWindow = trades.filter(trade =>
+            trade.openTime >= windowStart && trade.openTime <= windowEnd
+        );
+
+        if (tradesInWindow.length === 0) return;
+
+        const totalMarginUsed = tradesInWindow.reduce((sum, trade) => {
+            const pairKey = trade.pair?.toUpperCase() || '';
+            const contractSize = (contractSizes as Record<string, number>)[pairKey] || 0;
+            return sum + (contractSize * trade.openPrice * trade.lotSize) / LEVERAGE;
+        }, 0);
+
+        const threshold = initialBalance * MARGIN_THRESHOLD_PERCENTAGE;
+
+        if (totalMarginUsed > threshold) {
+            violations.push({
+                newsEvent: news,
+                trades: tradesInWindow,
+                totalMarginUsed,
+                threshold,
+            });
+        }
+    });
+
+    return violations;
+}
+
+const calculateMargin = (trade: Trade): number => {
+    const pairKey = trade.pair?.toUpperCase() || '';
+    const contractSize = contractSizes[pairKey] || 0;
+    return (trade.lotSize * contractSize) / LEVERAGE;
+};
+function calculateMarginUsageGroups(trades: Trade[], initialBalance: number): HedgedGroup[] {
+    console.log("Calculating Margin Usage Groups...");
+    console.log("Initial Balance:", initialBalance);
+    console.log("Number of Trades:", trades.length);
+    console.log("Contract Sizes:", contractSizes);
+
+    const marginUsageGroups: HedgedGroup[] = [];
+
+    trades.forEach(trade => {
+        const margin = calculateMargin(trade);
+        console.log(`Trade Ticket: ${trade.ticket}, Margin Used: ${margin}`);
+
+        if (margin > initialBalance * MARGIN_THRESHOLD_PERCENTAGE) {
+            marginUsageGroups.push({
+                trades: [trade],
+                totalProfit: trade.amount,
+            });
+            console.log(`Added to Margin Usage Groups: ${trade.ticket}`);
+        }
+    });
+
+    console.log("Margin Usage Groups:", marginUsageGroups);
+    return marginUsageGroups;
+}
+
+
 const analyzeTradingCompliance = (
     trades: Trade[],
     accountBalance: number,
     aggressive: boolean
 ): AnalysisResult => {
-    if (!Array.isArray(trades) || trades.length === 0 || isNaN(accountBalance)) {
-        console.error("Invalid input for analyzeTradingCompliance");
+    if (!trades.length || isNaN(accountBalance)) {
         return {
             violations: [],
             profitTarget: 0,
@@ -112,64 +217,55 @@ const analyzeTradingCompliance = (
     const maxAllowedProfit = profitTarget * PROFIT_LIMIT_PERCENTAGE;
     const violations: ChainViolation[] = [];
 
-    // Sort by openTime ascending
     const sortedTrades = trades.sort((a, b) => a.openTime.getTime() - b.openTime.getTime());
     let currentChain: Trade[] = [];
     let totalProfit = 0;
 
-    for (let i = 0; i < sortedTrades.length; i++) {
-        const trade = sortedTrades[i];
-        // Overlap => this trade's openTime <= any chain trade's closeTime
+    for (const trade of sortedTrades) {
         const isOverlapping = currentChain.some((t) => trade.openTime <= t.closeTime);
 
         if (isOverlapping || currentChain.length === 0) {
-            // Add to the chain if overlapping or it’s the first trade
             currentChain.push(trade);
             if (trade.amount > 0) {
-                totalProfit += trade.amount; // Only add if trade is profitable
+                totalProfit += trade.amount;
             }
         } else {
-            // Finalize the current chain if no overlap
             if (totalProfit >= maxAllowedProfit) {
                 violations.push({ trades: [...currentChain], totalProfit });
             }
-            // Start a new chain with the current trade
             currentChain = [trade];
             totalProfit = trade.amount > 0 ? trade.amount : 0;
         }
     }
 
-    // Finalize the last chain at the end of the positions table
     if (currentChain.length && totalProfit >= maxAllowedProfit) {
         violations.push({ trades: [...currentChain], totalProfit });
     }
+
+    const marginViolations = calculateMarginViolations(trades, accountBalance);
 
     return {
         violations,
         profitTarget,
         maxAllowedProfit,
-        isCompliant: violations.length === 0,
+        isCompliant: violations.length === 0 && marginViolations.length === 0,
+        initialBalance: accountBalance,
+        marginViolations,
     };
-};
-
-function extractStatementNumber(fileName: string): string | number {
-    const statementNumMatch = fileName.match(/\d+/);
-    return statementNumMatch ? parseInt(statementNumMatch[0], 10) : "Unknown";
 }
 
-/**
- * Parses an uploaded HTML statement file into an array of trades
- * and performs optional analyses (e.g. 80% profit target, 30-sec trades).
- */
+function extractStatementNumber(fileName: string): string | number {
+    const match = fileName.match(/\d+/);
+    return match ? parseInt(match[0], 10) : "Unknown";
+}
+
+
 const parseStatement = async (
     file: File,
     options: string[],
     aggressive: boolean
 ): Promise<AnalysisResult | null> => {
-    if (!file) {
-        console.error("No file uploaded");
-        return null;
-    }
+    if (!file) return null;
 
     try {
         const text = await file.text();
@@ -177,40 +273,57 @@ const parseStatement = async (
         const doc = parser.parseFromString(text, 'text/html');
         const rows = doc.querySelectorAll('tr');
 
-        if (!rows || rows.length === 0) {
-            console.error("No rows found in the document");
-            return null;
-        }
+        if (!rows.length) return null;
 
         const tradeData: Trade[] = [];
         let initialBalance = 0;
+        let marginUsageGroups: HedgedGroup[] = [];
 
-        // Iterate all rows in HTML
-        rows.forEach((row) => {
-            const cells = row.querySelectorAll('td');
-
-            // Parse initial balance
+        // First pass: Find Initial Balance
+        for (const row of rows) {
             if (row.textContent?.toLowerCase().includes("initial deposit")) {
+                const cells = row.querySelectorAll('td');
                 const balanceStr = cells[12]?.textContent?.trim().replace(/[^\d.-]/g, '') || '0';
                 initialBalance = parseFloat(balanceStr);
+                console.log("Initial Balance Parsed:", initialBalance); // Debug log
+                break; // Exit after finding initial balance
             }
+        }
+
+        // Second pass: Parse Trades
+        for (const row of rows) {
+            const cells = row.querySelectorAll('td');
+
+            const isOrdersRow = cells[3]?.textContent?.toLowerCase().includes("order");
+            if (isOrdersRow) {
+                continue; // Skip Orders rows without stopping
+            }
+
+            if (cells.length < 14) continue;
 
             const openTimeStr = cells[0]?.textContent?.trim() || '';
             const ticket = cells[1]?.textContent?.trim() || '';
             const pair = cells[2]?.textContent?.trim() || '';
             const positionType = cells[3]?.textContent?.trim() || '';
+            const lotSizeStrRaw = cells[5]?.textContent?.trim() || '';
+            const lotSizeStr = lotSizeStrRaw.replace(',', '.').replace(/[^\d.]/g, ''); // Clean lotSize
+            const openPriceStr = cells[6]?.textContent?.trim() || '';
             const closeTimeStr = cells[9]?.textContent?.trim() || '';
             const amountStr = cells[13]?.textContent?.trim().replace(/[\s,]/g, '') || '0';
 
-            const openTime = new Date(openTimeStr);
-            const closeTime = new Date(closeTimeStr);
-            const amount = parseFloat(amountStr);
 
+            const openTime = new Date(`${openTimeStr} GMT+0200`);
+            const closeTime = new Date(`${closeTimeStr} GMT+0200`);
+            const amount = parseFloat(amountStr);
+            const openPrice = parseFloat(openPriceStr);
+            const lotSize = parseFloat(lotSizeStr);
 
             if (
                 !isNaN(amount) &&
                 !isNaN(openTime.getTime()) &&
-                !isNaN(closeTime.getTime())
+                !isNaN(closeTime.getTime()) &&
+                !isNaN(openPrice) && // Validate openPrice
+                !isNaN(lotSize)     // Validate lotSize
             ) {
                 const duration = (closeTime.getTime() - openTime.getTime()) / 1000;
                 tradeData.push({
@@ -221,117 +334,110 @@ const parseStatement = async (
                     pair,
                     positionType,
                     duration,
+                    openPrice,
+                    lotSize,
                 });
+                console.log(`Parsed Trade: ${ticket}, OpenPrice: ${openPrice}, LotSize: ${lotSize}`);
+            } else {
+                console.warn(`Invalid trade data skipped: Ticket ${ticket}`);
+                console.log(`Parsed Values - OpenPrice: ${openPrice}, LotSize: ${lotSize}`);
+                console.log(`Raw LotSizeStr: "${lotSizeStrRaw}", Clean LotSizeStr: "${lotSizeStr}"`);
             }
-        });
-
-        console.log(`Initial balance before analysis: ${initialBalance}`);
-
-        // Only perform the compliance analysis if '80% profit target' is selected
-        let analysisResult: AnalysisResult | null = null;
-        if (options.includes('80% profit target')) {
-            analysisResult = analyzeTradingCompliance(tradeData, initialBalance, aggressive);
-        } else {
-            // Provide a default structure for consistency
-            analysisResult = {
-                violations: [],
-                profitTarget: 0,
-                maxAllowedProfit: 0,
-                isCompliant: true,
-            };
         }
 
-        // Filter trades for 30-second trades
-        if (options.includes('30-second-trades')) {
-            const thirtySecondTrades = tradeData.filter((t) => {
+        let analysisResult: AnalysisResult = {
+            violations: [],
+            profitTarget: 0,
+            maxAllowedProfit: 0,
+            isCompliant: true,
+        };
+
+        if (options.includes('80% profit')) {
+            analysisResult = analyzeTradingCompliance(tradeData, initialBalance, aggressive);
+        }
+
+        if (options.includes('30-second')) {
+            analysisResult.thirtySecondTrades = tradeData.filter((t) => {
                 const seconds = (t.closeTime.getTime() - t.openTime.getTime()) / 1000;
                 return seconds < 30 && t.amount > 0;
             });
-            analysisResult = { ...analysisResult, thirtySecondTrades };
-        }
-        if (options.includes('News hedging')) {
-            // Add News hedging logic here
-            // Example:
-            // const newsHedgingViolations = checkNewsHedging(tradeData);
-            // analysisResult = { ...analysisResult, newsHedgingViolations };
         }
 
-        if (options.includes('50% Margin Usage in news')) {
-            // Add Margin Usage violation logic here
-            // Example:
-            // const marginUsageViolations = checkMarginUsage(tradeData, initialBalance);
-            // analysisResult = { ...analysisResult, marginUsageViolations };
+        if (options.includes('50% Margin')) {
+            const marginViolations = calculateMarginViolations(tradeData, initialBalance);
+            marginUsageGroups = calculateMarginUsageGroups(tradeData, initialBalance);
+            console.log("Margin Violations:", marginViolations);
+            console.log("Margin Usage Groups:", marginUsageGroups);
+            analysisResult.marginViolations = marginViolations;
+            analysisResult.marginUsageGroups = marginUsageGroups;
+            if (marginViolations.length > 0 || marginUsageGroups.length > 0) {
+                analysisResult.isCompliant = false;
+            }
         }
+
         const allTrades: ExtendedTrade[] = tradeData.map((t) => {
             const { ffDate, ffTime } = toForexFactoryDateTime(t.openTime);
-
             return {
                 ...t,
-                direction: t.positionType.toUpperCase(), // e.g. "BUY" or "SELL"
+                direction: t.positionType.toUpperCase(),
                 instrument: t.pair || '',
                 ffDate,
                 ffTime,
             };
         });
 
-        // Merge analysis results with trades
         return {
             ...analysisResult,
             initialBalance,
             allTrades,
             statementNumber: extractStatementNumber(file.name),
+            marginUsageGroups, // Existing functionality
         };
-    } catch (error: any) {
-        console.error("Error parsing statement:", error);
+    } catch (error) {
+        console.error("Error parsing the statement:", error);
         return {
             violations: [],
             profitTarget: 0,
             maxAllowedProfit: 0,
             isCompliant: false,
-            error: error.message
+            error: "Parsing error",
         };
     }
 };
 
-// Dark theme for MUI
-const darkTheme = createTheme({
-    palette: {
-        mode: 'dark',
-        primary: {
-            main: '#3f51b5',
-        },
-        secondary: {
-            main: '#007bff',
-        },
-        background: {
-            default: '#212121',
-            paper: '#292929',
-        },
-        text: {
-            primary: '#eee',
-            secondary: '#ddd',
-        },
-    },
-});
+const getFunctionIcon = (option: string) => {
+    switch (option) {
+        case '30-second':
+            return <AccessTimeIcon fontSize="small" sx={{ mr: 1, color: 'secondary.main' }} />;
+        case 'hedging':
+            return <SwapHorizIcon fontSize="small" sx={{ mr: 1, color: 'secondary.main' }} />;
+        case '80% profit':
+            return <TrendingUpIcon fontSize="small" sx={{ mr: 1, color: 'secondary.main' }} />;
+        case '50% Margin':
+            return <AccountBalanceIcon fontSize="small" sx={{ mr: 1, color: 'secondary.main' }} />;
+        default:
+            return null;
+    }
+};
 
-const StyledTable = styled(TableContainer)(({ theme }) => ({
-    backgroundColor: theme.palette.background.paper,
-}));
+
 
 const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
     if (!result) return null;
     const {
         statementNumber,
+        initialBalance,
         profitTarget = 0,
         maxAllowedProfit = 0,
         violations = [],
         thirtySecondTrades = [],
         allTrades = [],
+        marginViolations = [],
     } = result;
-    function formatDateInGMT2(date: Date): string {
-        // Format in "YYYY-MM-DD HH:MM:SS" for GMT+2
+
+    function formatDate24GMT2(date: Date): string {
         return date.toLocaleString('en-GB', {
-            timeZone: 'Etc/GMT-2',
+            timeZone: 'Europe/Riga',
             year: 'numeric',
             month: '2-digit',
             day: '2-digit',
@@ -341,30 +447,50 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
             hour12: false
         }).replace(',', '');
     }
+
     return (
-        <ThemeProvider theme={darkTheme}>
+
             <Box sx={{ mt: 4 }}>
-                {/* Only show these if we had a compliance analysis done */}
                 {(profitTarget > 0 || maxAllowedProfit > 0) && (
-                    <>
-                        <Typography>Statement #: {statementNumber ?? 'Unknown'}</Typography>
-                        <Typography>
+
+                    <Paper
+                        sx={{
+                            p: 2,
+                            mb: 2,
+                            borderRadius: '8px',
+                            backgroundColor: 'background.paper',
+                        }}
+                    >
+                        <Typography variant="h6" color="primary">
+                            Statement #: {statementNumber ?? 'Unknown'}
+                        </Typography>
+                        <Typography variant="body1" color="success">
+                            Initial Balance: {initialBalance ?? 'Unknown'}
+                        </Typography>
+                        <Typography variant="body1">
                             Profit Target: ${profitTarget.toFixed(2)}
                         </Typography>
-                        <Typography>
+                        <Typography variant="body1">
                             Max Allowed Profit (80%): ${maxAllowedProfit.toFixed(2)}
                         </Typography>
-                    </>
+                    </Paper>
                 )}
-
-                {/* Violations */}
+                {/* Chained Groups Section */}
                 {violations.map((chainedGroup, index) => (
-                    <Box key={index} sx={{ mt: 3 }}>
-                        <Typography variant="subtitle1">
+                    <Paper
+                        key={index}
+                        sx={{
+                            p: 2,
+                            mt: 3,
+                            borderRadius: '8px',
+                            backgroundColor: 'background.paper',
+                        }}
+                    >
+                        <Typography variant="h6" color="error">
                             Chained Group #{index + 1} - Total Profit: $
                             {chainedGroup.totalProfit.toFixed(2)}
                         </Typography>
-                        <StyledTable>
+
                             <Table size="small">
                                 <TableHead>
                                     <TableRow>
@@ -378,12 +504,8 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                                     {chainedGroup.trades.map((trade) => (
                                         <TableRow key={trade.ticket}>
                                             <TableCell>{trade.ticket}</TableCell>
-                                            <TableCell>
-                                                {trade.openTime.toLocaleString()}
-                                            </TableCell>
-                                            <TableCell>
-                                                {trade.closeTime.toLocaleString()}
-                                            </TableCell>
+                                            <TableCell>{formatDate24GMT2(trade.openTime)}</TableCell>
+                                            <TableCell>{formatDate24GMT2(trade.closeTime)}</TableCell>
                                             <TableCell align="right">
                                                 ${trade.amount.toFixed(2)}
                                             </TableCell>
@@ -391,15 +513,21 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                                     ))}
                                 </TableBody>
                             </Table>
-                        </StyledTable>
-                    </Box>
-                ))}
 
-                {/* 30-second Trades */}
+                    </Paper>
+                ))}
+                {/* Trades Under 30 Seconds Section */}
                 {thirtySecondTrades.length > 0 && (
-                    <Box sx={{ mt: 4 }}>
-                        <Typography variant="h6">Trades Under 30 Seconds</Typography>
-                        <TableContainer component={Paper}>
+                    <Paper
+                        sx={{
+                            p: 2,
+                            mt: 4,
+                            borderRadius: '8px',
+                            backgroundColor: 'background.paper',
+                        }}
+                    >
+                        <Typography variant="h6" color="error">Trades Under 30 Seconds</Typography>
+                        <TableContainer component={Paper} sx={{ mt: 1 }}>
                             <Table size="small">
                                 <TableHead>
                                     <TableRow>
@@ -412,12 +540,18 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                                 </TableHead>
                                 <TableBody>
                                     {thirtySecondTrades.map((trade) => {
-                                        const duration = (trade.closeTime.getTime() - trade.openTime.getTime()) / 1000;
+                                        const duration =
+                                            (trade.closeTime.getTime() - trade.openTime.getTime()) /
+                                            1000;
                                         return (
                                             <TableRow key={trade.ticket}>
                                                 <TableCell>{trade.ticket}</TableCell>
-                                                <TableCell>{formatDateInGMT2(trade.openTime)}</TableCell>
-                                                <TableCell>{formatDateInGMT2(trade.closeTime)}</TableCell>
+                                                <TableCell>
+                                                    {formatDate24GMT2(trade.openTime)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {formatDate24GMT2(trade.closeTime)}
+                                                </TableCell>
                                                 <TableCell>{duration.toFixed(2)}</TableCell>
                                                 <TableCell align="right">
                                                     ${trade.amount.toFixed(2)}
@@ -434,17 +568,29 @@ const TradingAnalysis = ({ result }: { result: AnalysisResult }) => {
                                 .reduce((acc, trade) => acc + trade.amount, 0)
                                 .toFixed(2)}
                         </Typography>
-                    </Box>
+                    </Paper>
                 )}
 
-                {/* Pass ALL extended trades to HedgeTrades, so it can check the news times */}
+                {/* Additional Sections (allTrades, marginViolations, etc.) */}
                 {allTrades.length > 0 && (
                     <Box sx={{ mt: 4 }}>
                         <HedgeTrades trades={allTrades} />
                     </Box>
                 )}
+
+                {marginViolations.length > 0 && (
+                    <Paper
+                        sx={{
+                            p: 2,
+                            mt: 4,
+                            borderRadius: '8px',
+                            backgroundColor: 'background.paper',
+                        }}
+                    >
+                        <MarginUsage violations={marginViolations} />
+                    </Paper>
+                )}
             </Box>
-        </ThemeProvider>
     );
 };
 
@@ -453,16 +599,31 @@ const StatementParser = () => {
     const [file, setFile] = useState<File | null>(null);
     const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
     const [aggressiveAccount, setAggressiveAccount] = useState<boolean>(false);
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+
 
     useEffect(() => {
-        // Reset analysis if user changes file
-        setAnalysisResult(null);
-    }, [file]);
+        const parseFile = async () => {
+            if (!file) return;
+            setIsLoading(true);
+            const result = await parseStatement(file, options, aggressiveAccount);
+            if (result?.error) {
+                console.error("Error parsing the file:", result.error);
+                setIsLoading(false);
+                return;
+            }
+            const statementNumber = extractStatementNumber(file.name);
+            if (result) {
+                setAnalysisResult({ ...result, statementNumber });
+            }
+            setIsLoading(false);
+        };
+
+        parseFile();
+    }, [file, options, aggressiveAccount]);
 
     const handleOptionsChange = (event: any) => {
-        const {
-            target: { value },
-        } = event;
+        const { value } = event.target;
         setOptions(typeof value === 'string' ? value.split(',') : value);
     };
 
@@ -470,99 +631,73 @@ const StatementParser = () => {
         setAggressiveAccount(event.target.value === 'true');
     };
 
-    const handleParse = async () => {
-        if (!file) {
-            console.error("Please upload a file first.");
-            return;
-        }
-
-        try {
-            // Clear old results
-            setAnalysisResult(null);
-
-            // Parse the statement
-            const result = await parseStatement(file, options, aggressiveAccount);
-            if (result?.error) {
-                console.error("Error parsing the file:", result.error);
-                return;
-            }
-
-            // Add a statement number for display
-            const statementNumber = extractStatementNumber(file.name);
-            if (result) {
-                setAnalysisResult({ ...result, statementNumber });
-            }
-        } catch (error) {
-            console.error("Error during file parsing:", error);
-        }
-    };
-
     return (
         <ThemeProvider theme={darkTheme}>
-            <Box sx={{ mt: { xs: 7, sm: 8 }, px: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}>
-                    <Button
-                        component="label"
-                        variant="contained"
-                        startIcon={<CloudUploadIcon />}
-                        sx={{ minWidth: 180, height: 55, mt: 1 }}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1 }}>
+                {/* Functions Selection as a Multiple Select with custom text color */}
+                <FormControl fullWidth sx={{ minWidth: 300, flexGrow: 1, mt: 2 }}>
+                    <InputLabel id="multiple-options" sx={{ color: 'secondary.main' }}>
+                        Select an option
+                    </InputLabel>
+                    <Select
+                        labelId="multiple-options"
+                        id="multiple-options"
+                        multiple
+                        value={options}
+                        onChange={handleOptionsChange}
+                        input={<OutlinedInput label="Options" />}
+                        sx={{
+                            '& .MuiSelect-select': { color: 'secondary.main' },
+                        }}
+                        MenuProps={MenuProps}
                     >
-                        Upload files
-                        <input
-                            type="file"
-                            hidden
-                            accept=".htm,.html"
-                            onChange={(e) => {
-                                if (e.target.files?.length) {
-                                    setFile(e.target.files[0]);
-                                }
-                            }}
-                        />
-                    </Button>
+                        {functions.map((option) => (
+                            <MenuItem key={option} value={option} sx={{ color: 'secondary.main' }}>
+                                {getFunctionIcon(option)}
+                                {option}
+                            </MenuItem>
+                        ))}
+                    </Select>
+                </FormControl>
 
-                    {/* Multiple Select Options */}
-                    <FormControl fullWidth sx={{ minWidth: 300, flexGrow: 1, mt: 2 }}>
-                        <InputLabel id="multiple-options">Select an option</InputLabel>
-                        <Select
-                            labelId="multiple-options"
-                            id="multiple-options"
-                            multiple
-                            value={options}
-                            onChange={handleOptionsChange}
-                            input={<OutlinedInput label="Options" />}
-                            MenuProps={MenuProps}
-                        >
-                            {functions.map((option) => (
-                                <MenuItem key={option} value={option}>
-                                    {option}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
+                <FormControl component="fieldset" sx={{ minWidth: 200, flexGrow: 1, mt: 2 }}>
 
-                    {/* Account Type */}
-                    <FormControl sx={{ minWidth: 200, flexGrow: 1, mt: 2 }}>
-                        <InputLabel htmlFor="aggressive-account">Account Type</InputLabel>
-                        <Select
-                            value={aggressiveAccount ? 'true' : 'false'}
-                            onChange={handleAggressiveChange}
-                            input={<OutlinedInput label="Account Type" />}
-                        >
-                            <MenuItem value="false">Normal</MenuItem>
-                            <MenuItem value="true">Aggressive</MenuItem>
-                        </Select>
-                    </FormControl>
-
-                    <Button
-                        variant="contained"
-                        sx={{ height: 55, mt: 1, minWidth: 120 }}
-                        onClick={handleParse}
+                    <RadioGroup
+                        row
+                        aria-label="account-type"
+                        name="account-type"
+                        value={aggressiveAccount ? 'true' : 'false'}
+                        onChange={handleAggressiveChange}
                     >
-                        Analyze
-                    </Button>
+                        <FormControlLabel value="false" control={<Radio />} label="Normal" />
+                        <FormControlLabel value="true" control={<Radio />} label="Aggressive" />
+                    </RadioGroup>
+                </FormControl>
+            </Box>
+
+            {/* Drag & Drop Card for file upload */}
+            <DropZone onFileAccepted={(acceptedFile) => setFile(acceptedFile)} fileUploaded={!!file} />
+
+            {file && (
+                <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle1">File: {file.name}</Typography>
                 </Box>
+            )}
+            {/* Loading Skeleton and Analysis Result with smooth transition */}
+            <Box sx={{ mt: 4 }}>
 
-                {analysisResult && <TradingAnalysis result={analysisResult} />}
+                <Fade in={isLoading} timeout={500} unmountOnExit>
+                    <Box>
+                        <Skeleton variant="rectangular" height={200} animation="wave" sx={{ mb: 2 }} />
+                        <Skeleton variant="text" height={40} animation="wave" />
+                        <Skeleton variant="text" height={40} animation="wave" />
+                    </Box>
+                </Fade>
+                <Fade in={!isLoading && !!analysisResult} timeout={500} unmountOnExit>
+                    <Box>
+                        {analysisResult && <TradingAnalysis result={analysisResult} />}
+                    </Box>
+                </Fade>
             </Box>
         </ThemeProvider>
     );
