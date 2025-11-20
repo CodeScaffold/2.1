@@ -1,5 +1,5 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
-import moment from 'moment-timezone';
+import mongoose, { Schema, Document, Model } from "mongoose";
+import moment from "moment-timezone";
 
 interface ILog extends Document {
   userId: string;

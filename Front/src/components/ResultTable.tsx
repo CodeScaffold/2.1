@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { alpha, useTheme } from "@mui/material/styles";
 import { useQuery } from "@tanstack/react-query";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import { exportToCSV } from "../utils/utils";
@@ -11,12 +12,14 @@ import {
   TableCell,
   TableContainer,
   TableHead,
-  TableRow,
+  TableRow, Typography,
 } from "@mui/material";
+import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import { API_URL } from "./settings.ts";
 import { Commends, Reasons } from "./Reason.ts";
+import PendingActionsIcon from "@mui/icons-material/PendingActions";
 
 function getNameFromValue(value: string, Array: any[]) {
   const item = Array.find((reason: { value: string; }) => reason.value === value);
@@ -54,9 +57,10 @@ const getToken = () => {
   return localStorage.getItem("token");
 };
 
-const fetchResults = async (page: number): Promise<ApiResponse> => {
+export const fetchResults = async (page: number): Promise<ApiResponse> => {
   const token = getToken();
   const response = await fetch(`${API_URL}/result?page=${page}`, {
+    credentials: 'include',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -67,10 +71,11 @@ const fetchResults = async (page: number): Promise<ApiResponse> => {
   return await response.json();
 };
 
-const fetchAllResults = async (): Promise<ApiResponse> => {
+export const fetchAllResults = async (): Promise<ApiResponse> => {
   const token = getToken();
   const url = `${API_URL}/result?paginate=false`;
   const response = await fetch(url, {
+    credentials: 'include',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -78,7 +83,12 @@ const fetchAllResults = async (): Promise<ApiResponse> => {
   if (!response.ok) {
     throw new Error(`HTTP error! Status: ${response.status}`);
   }
-  return await response.json();
+  const data = await response.json();
+  // Normalize array response into ApiResponse shape
+  if (Array.isArray(data)) {
+    return { results: data, totalResultsCount: data.length };
+  }
+  return data;
 };
 
 const ResultTable: React.FC = () => {
@@ -87,6 +97,19 @@ const ResultTable: React.FC = () => {
     queryKey: ["results", page],
     queryFn: () => fetchResults(page),
   });
+  const { data: allData} = useQuery({
+    queryKey: ["allResults"],
+    queryFn: fetchAllResults,
+  });
+
+  const theme = useTheme();
+
+  const pendingCompensation = allData
+    ? allData.results
+        .filter((row) => !row.archivedAt) // only include unarchived items
+        .reduce((sum, row) => sum + row.compensate, 0)
+        .toFixed(2)
+    : "0.00";
 
   const [results, setResults] = useState<ResultDataType[]>([]);
   const [totalResultsCount, setTotalResultsCount] = useState(0);
@@ -134,6 +157,7 @@ const ResultTable: React.FC = () => {
     try {
       const response = await fetch(`${API_URL}/result/${id}`, {
         method: "PATCH",
+        credentials: 'include',
         headers: {
           "Content-Type": "application/json",
         },
@@ -166,58 +190,180 @@ const ResultTable: React.FC = () => {
   if (results.length === 0) return <p>No data found.</p>;
 
   return (
+      <Box
+          sx={{
+            display: "flex",
+            flexDirection: { xs: "column", md: "row" },
+            flexWrap: "wrap",
+            gap: 2,
+            width: "100%",
+          }}
+      >
     <>
-      <Card raised sx={{ margin: 2 }}>
+      <Card
+        sx={{
+          height: "auto",
+          width: {
+            xs: "100%", // full width on small
+            md: "100%", // full width until md breakpoint
+          },
+          // At very large viewports (>2560px), shrink to allow three-per-row
+          "@media (min-width:2560px)": {
+            width: "60%", // three cards side by side
+          },
+          backgroundColor: alpha(theme.palette.background.default, 0.5),
+          borderRadius: 2,
+          boxShadow: 1,
+          p: 2,
+          mt: 5,
+          mx: 2,
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", m: 2 }}>
+          <PendingActionsIcon fontSize="large" sx={{ mr: 1 }}  />
+          <Typography variant="h5" color="white" >
+              {`Pending Compensation ${pendingCompensation}`}
+          </Typography>
+        </Box>
         <CardContent>
-          <TableContainer component={Paper}>
+          <TableContainer >
             <Table
-              sx={{ minWidth: 650 }}
+              component="div"
+              sx={{ minWidth: 650, borderRadius: 2, overflow: 'hidden' }}
               aria-label="simple table"
               style={{ color: "white" }}
             >
-              <TableHead>
-                <TableRow>
-                  <TableCell>Account</TableCell>
-                  <TableCell>Ticket</TableCell>
-                  <TableCell>Reason</TableCell>
-                  <TableCell>commend</TableCell>
-                  <TableCell>Version</TableCell>
-                  <TableCell>Compensate</TableCell>
-                  <TableCell>First Check</TableCell>
-                  <TableCell>Second Check</TableCell>
-                </TableRow>
+              <TableHead component="div">
+                <Box sx={{ display: "flex", alignItems: "center", mb: 2, borderRadius: 2, p: 1.5, backgroundColor: "#494c52" }}>
+                  <Box sx={{ flex: 1, color: "#ccc", fontSize: 16 }}>Account</Box>
+                  <Box sx={{ flex: 1, color: "#ccc", fontSize: 16 }}>Ticket</Box>
+                  <Box sx={{ flex: 1, color: "#ccc", fontSize: 16 }}>Reason</Box>
+                  <Box sx={{ flex: 1, color: "#ccc", fontSize: 16 }}>Commend</Box>
+                  <Box sx={{ flex: 1, color: "#ccc", fontSize: 16 }}>Version</Box>
+                  <Box sx={{ flex: 1, color: "#ccc", fontSize: 16 }}>Compensate</Box>
+                  <Box sx={{ flex: 1, color: "#ccc", fontSize: 16 }}>First Check</Box>
+                  <Box sx={{ flex: 1, color: "#ccc", fontSize: 16 }}>Second Check</Box>
+                </Box>
               </TableHead>
-              <TableBody>
+              <TableBody component={Paper}
+                         sx={{ borderRadius: 2, overflow: 'hidden' }}>
                 {results.map((row: ResultDataType) => (
                   <TableRow
+                    component={Paper}
                     key={row.id}
                     sx={{
-                      "&:last-child td, &:last-child th": { border: 0 },
+                      display: "flex",
+                      alignItems: "center",
+                      m: 1,
+                      borderRadius: 2,
+                      p: 1,
+                      boxShadow: 1,
+                      backgroundColor: alpha(theme.palette.background.default, 0.5),
+                      transition: "box-shadow 0.2s ease",
                       "&:hover": {
-                        backgroundColor: "rgba(255, 255, 255, 0.08)",
+                        boxShadow: 4,
                       },
                     }}
                   >
-                    <TableCell component="th" scope="row">
+                    <TableCell
+                      component="div"
+                      scope="row"
+                      sx={{
+                        flex: 1,
+                        color: "#fff",
+                        fontSize: 14,
+                        borderBottom: "none",
+                        py: 0.5,
+                      }}
+                    >
                       {row.account}
                     </TableCell>
-                    <TableCell>{row.ticket}</TableCell>
-                    <TableCell>
+                    <TableCell
+                      component="div"
+                      sx={{
+                        flex: 1,
+                        color: "#fff",
+                        fontSize: 14,
+                        borderBottom: "none",
+                        py: 0.5,
+                      }}
+                    >
+                      {row.ticket}
+                    </TableCell>
+                    <TableCell
+                      component="div"
+                      sx={{
+                        flex: 1,
+                        color: "#fff",
+                        fontSize: 14,
+                        borderBottom: "none",
+                        py: 0.5,
+                      }}
+                    >
                       {getNameFromValue(row.reason, Reasons)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell
+                      component="div"
+                      sx={{
+                        flex: 1,
+                        color: "#fff",
+                        fontSize: 14,
+                        borderBottom: "none",
+                        py: 0.5,
+                      }}
+                    >
                       {getNameFromValue(row.commend, Commends)}
                     </TableCell>
-                    <TableCell>{row.version}</TableCell>
+                    <TableCell
+                      component="div"
+                      sx={{
+                        flex: 1,
+                        color: "#fff",
+                        fontSize: 14,
+                        borderBottom: "none",
+                        py: 0.5,
+                      }}
+                    >
+                      {row.version}
+                    </TableCell>
                     {/*<TableCell>{row.difference.toFixed(2)}</TableCell>*/}
-                    <TableCell>{row.compensate.toFixed(2)}</TableCell>
-                    <TableCell>
+                    <TableCell
+                      component="div"
+                      sx={{
+                        flex: 1,
+                        color: "#fff",
+                        fontSize: 14,
+                        borderBottom: "none",
+                        py: 0.5,
+                      }}
+                    >
+                      {row.compensate.toFixed(2)}
+                    </TableCell>
+                    <TableCell
+                      component="div"
+                      sx={{
+                        flex: 1,
+                        color: "#fff",
+                        fontSize: 14,
+                        borderBottom: "none",
+                        py: 0.5,
+                      }}
+                    >
                       <Checkbox
                         checked={row.firstCheck}
                         onChange={() => handleChangeCheck(row.id, "firstCheck")}
                       />
                     </TableCell>
-                    <TableCell>
+                    <TableCell
+                      component="div"
+                      sx={{
+                        flex: 1,
+                        color: "#fff",
+                        fontSize: 14,
+                        borderBottom: "none",
+                        py: 0.5,
+                      }}
+                    >
                       <Checkbox
                         disabled={!row.firstCheck}
                         checked={row.secondCheck}
@@ -253,20 +399,23 @@ const ResultTable: React.FC = () => {
             </Button>
           </div>
         </CardContent>
-        <Button
-          onClick={handleExportAllToCSV}
-          variant="contained"
-          color="primary"
-          startIcon={<CloudDownloadIcon style={{ fontSize: "1.25rem" }} />}
-          style={{
-            margin: "10px",
-            padding: "10px 20px",
-          }}
-        >
-          CSV
-        </Button>
+        <Box sx={{ display: "flex", justifyContent: "flex-end", m: 1 , mt:0 }}>
+          <Button
+            onClick={handleExportAllToCSV}
+            variant="contained"
+            color="primary"
+            startIcon={<CloudDownloadIcon style={{ fontSize: "1rem" }} />}
+            style={{
+              margin: "10px",
+              padding: "10px 20px",
+            }}
+          >
+            Export
+          </Button>
+        </Box>
       </Card>
     </>
+      </Box>
   );
 };
 export default ResultTable;

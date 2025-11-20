@@ -259,6 +259,20 @@ export const Pairs = [
     quote: "USD",
   },
   {
+    name: "DJI30SEP25",
+    contractSize: 5,
+    tickSize: 0.1,
+    base: "DJI",
+    quote: "USD",
+  },
+  {
+    name: "DAXEUR",
+    contractSize: 10,
+    tickSize: 0.1,
+    base: "DAX",
+    quote: "EUR",
+  },
+  {
     name: "SPXUSD",
     contractSize: 10,
     tickSize: 0.01,

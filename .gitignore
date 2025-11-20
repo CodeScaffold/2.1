@@ -1,0 +1,232 @@
+# Environment Variables
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*
+
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build Outputs
+dist/
+build/
+dist-ssr/
+*.tsbuildinfo
+*.js.map
+*.d.ts.map
+
+# TypeScript Compilation Files
+*.js
+*.d.ts
+!*.config.js
+!vite.config.js
+!tailwind.config.js
+!postcss.config.js
+!eslint.config.js
+
+# Prisma Generated Files
+prisma/generated/
+prisma/client/
+prisma/migrations/*/migration.sql
+node_modules/.prisma/
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup Files and Directories
+*backup*
+*Backup*
+*BACKUP*
+backup/
+backups/
+*.backup
+*.bak
+*.orig
+*.tmp
+*.temp
+server\ db\ backup/
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Cache and Temporary Files
+.cache/
+.temp/
+.tmp/
+temp/
+tmp/
+
+# IDE and Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Runtime Files
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage Directory Used by Tools Like Istanbul
+coverage/
+*.lcov
+.nyc_output/
+
+# Dependency Directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# ESLint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+.env.test
+.env.production
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Next.js build output
+.next
+out
+
+# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+public
+
+# Storybook build outputs
+.out
+.storybook-out
+
+# Temporary folders
+tmp/
+temp/
+
+# Local development
+.local
+
+# Vercel
+.vercel
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# Compiled binary addons (https://nodejs.org/api/addons.html)
+build/Release
+
+# TypeScript v1 declaration files
+typings/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Screenshots and Images
+Screenshot_*.jpeg
+Screenshot_*.jpg
+Screenshot_*.png
+*.screenshot.*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Archive files
+*.zip
+*.rar
+*.7z
+*.tar.gz
+*.tar.bz2

@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,6 +5,157 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+  role     String @default("opofinance_support")
+  logs     Log[]
+}
+
+model Result {
+  id            Int       @id @default(autoincrement())
+  ticket        String?   @unique
+  pair          String?
+  lot           Float?
+  tp            Float?
+  sl            Float?
+  closePrice    Float?
+  difference    Float?
+  compensate    Float?
+  reason        Reasons?
+  archivedAt    DateTime?
+  secondCheck   Boolean   @default(false)
+  firstCheck    Boolean   @default(false)
+  account       String?
+  commend       Commends?
+  openPrice     Float?
+  closeTimeDate DateTime?
+  clientId      String?
+  version       Versions?
+}
+
+model Log {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  action    String
+  timestamp DateTime @default(now())
+  details   String
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model ForexNews {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  data      Json
+}
+
+model Reports {
+  id                                    Int          @id @default(autoincrement())
+  ThirtySecondTrades                    String
+  NewsHedgeTrades                       String
+  Rule80Percent                         String
+  MarginViolations                      String
+  Agent                                 String
+  Decision                              Decision?
+  createdAt                             DateTime     @default(now())
+  accountLogin                          String?
+  AccountPhase                          String?
+  MetaTraderVersion                     String?
+  Note                                  String?
+  accountBalance                        Float?
+  accountType                           AccountType?
+  riskType                              RiskType?
+  tradingLogin                          String?      @db.VarChar
+  StabilityRule                         String?      @default("not analyzed") @db.VarChar(20)
+  Account                               Account?     @relation(fields: [accountLogin], references: [login])
+  Account_Reports_tradingLoginToAccount Account?     @relation("Reports_tradingLoginToAccount", fields: [tradingLogin], references: [tradingLogin], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([accountLogin], map: "idx_reports_accountlogin")
+  @@index([tradingLogin], map: "idx_reports_tradinglogin")
+}
+
+model Leverage {
+  id       Int    @id @default(autoincrement())
+  pair     String @unique
+  leverage Float
+}
+
+model UpgradePendingAccount {
+  id          String   @id
+  firstName   String?
+  lastName    String?
+  email       String
+  updatedAt   DateTime
+  programId   String
+  version     String
+  login       String
+  balance     Float
+  equity      Float
+  state       String
+  invoiceId   String
+  userId      String
+  programName String
+  country     String?
+}
+
+/// Stores program metadata to minimize API calls
+model Program {
+  id        String   @id
+  name      String
+  updatedAt DateTime @updatedAt
+}
+
+model Payout {
+  id              String   @id
+  accountId       String
+  amount          Float
+  transferAmount  Float
+  profitSplit     Int
+  email           String
+  fullName        String
+  login           String
+  payoutDetails   Json
+  state           String
+  rejectionReason String?
+  userId          String
+  createdAt       DateTime
+  updatedAt       DateTime @updatedAt
+  paymentAgent    String?
+}
+
+model ZapierMailTrack {
+  email     String   @id
+  notified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  login                                 String    @id @default(cuid())
+  programName                           String
+  status                                String?
+  clientId                              Int
+  createdAt                             DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt                             DateTime  @default(now()) @db.Timestamptz(6)
+  tradingLogin                          String?   @unique @db.VarChar
+  Client                                Client    @relation(fields: [clientId], references: [id], onDelete: NoAction, onUpdate: NoAction, map: "Account_clientid_fkey")
+  reports                               Reports[]
+  Reports_Reports_tradingLoginToAccount Reports[] @relation("Reports_tradingLoginToAccount")
+
+  @@index([clientId], map: "idx_account_clientid")
+  @@index([tradingLogin], map: "idx_account_tradinglogin")
+}
+
+model Client {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique
+  country   String?
+  firstName String?
+  lastName  String?
+  accounts  Account[]
 }
 
 enum Reasons {
@@ -36,43 +181,20 @@ enum Versions {
   cTrader
 }
 
-model User {
-  id       Int    @id @default(autoincrement())
-  email    String @unique
-  password String
-  logs     Log[]
+enum Decision {
+  Approved
+  Rejected
+  Review
 }
 
-model Result {
-  id            Int       @id @default(autoincrement())
-  clientId      String?
-  account       String?
-  ticket        String?
-  pair          String?
-  lot           Float?
-  openPrice     Float?
-  tp            Float?
-  sl            Float?
-  closePrice    Float?
-  closeTimeDate DateTime?
-  reason        Reasons?
-  commend       Commends?
-  difference    Float?
-  compensate    Float?
-  firstCheck    Boolean   @default(false)
-  secondCheck   Boolean   @default(false)
-  archivedAt    DateTime?
-  version       Versions?
-
-  @@unique([ticket])
+enum AccountType {
+  LEGEND
+  PEAK_SCALP
+  BLACK
+  FLASH
 }
 
-model Log {
-  id        Int      @id @default(autoincrement())
-  userId    Int
-  action    String
-  timestamp DateTime @default(now())
-  details   String
-
-  user User @relation(fields: [userId], references: [id])
+enum RiskType {
+  AGGRESSIVE
+  NORMAL
 }

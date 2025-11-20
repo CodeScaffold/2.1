@@ -19,14 +19,31 @@ interface ResultDataType {
   version: string;
   clientId: number;
 }
+
 export const exportToCSV = (data: ResultDataType[], filename: string): void => {
+  // Check if the data array is empty or undefined.
+  if (!data || data.length === 0) {
+    // Create an empty CSV file.
+    const blob = new Blob([""], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.setAttribute("hidden", "");
+    a.setAttribute("href", url);
+    a.setAttribute("download", `${filename}.csv`);
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    return;
+  }
+
+  // Otherwise, proceed with exporting data.
   const headers = Object.keys(data[0]);
   const csvRows = data.map((row) =>
-    headers
-      .map((header) =>
-        JSON.stringify(row[header as keyof ResultDataType] ?? "", undefined, 2),
-      )
-      .join(","),
+      headers
+          .map((header) =>
+              JSON.stringify(row[header as keyof ResultDataType] ?? "", undefined, 2)
+          )
+          .join(",")
   );
 
   const csvData = [headers.join(","), ...csvRows].join("\n");

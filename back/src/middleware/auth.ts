@@ -1,27 +1,20 @@
-import process from "process";
-import jwt from "jsonwebtoken";
 import Koa from "koa";
 
-export function jwtAuthMiddleware() {
+export function sessionAuthMiddleware() {
   return async function (ctx: Koa.Context, next: Koa.Next) {
-    const authHeader = ctx.headers.authorization;
-    if (!authHeader) {
+    const user = ctx.session?.user;
+    if (!user) {
       ctx.status = 403;
       ctx.body = {
         message: "You must be logged in to use this area.",
       };
       return;
     }
-    const token = authHeader.split(" ")[1];
-    let payload;
-    try {
-      payload = jwt.verify(token, process.env.JWT_SECRET!);
-    } catch (err) {
-      ctx.status = 401;
-      ctx.body = { error: "Invalid token" };
-      return;
-    }
-    ctx.state.user = payload;
+    // Derive agentName from the session email
+    ctx.state.user = {
+      ...user,
+      agentName: user.email.split("@")[0],
+    };
     await next();
   };
 }

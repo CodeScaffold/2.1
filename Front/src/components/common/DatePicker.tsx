@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { DateRange } from "react-date-range";
+import React, { useState } from "react";
+import { DateRange, RangeKeyDict } from "react-date-range";
 import { addDays } from "date-fns";
 import "react-date-range/dist/styles.css";
 import "react-date-range/dist/theme/default.css";
@@ -9,33 +9,48 @@ import InputAdornment from "@mui/material/InputAdornment";
 import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
 import Popover from "@mui/material/Popover";
 import Box from "@mui/material/Box";
+import { DateRangePickerComponentProps, Range } from "../../utils/types";
 
-const DateRangePickerComponent = ({ onDateChange }) => {
-  const [state, setState] = useState([
-    {
-      startDate: new Date(),
-      endDate: addDays(new Date(), 7),
-      key: "selection",
-    },
-  ]);
-  const [anchorEl, setAnchorEl] = useState(null);
+const DateRangePickerComponent: React.FC<DateRangePickerComponentProps> = ({
+  onDateChange,
+}) => {
+  // Initially, no date range is selected.
+  const [state, setState] = useState<Range[] | null>(null);
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
-  const handleDateChange = (ranges) => {
-    const { selection } = ranges;
+  // A default range to use when opening the picker if none is set.
+  const defaultRange: Range = {
+    startDate: new Date(),
+    endDate: addDays(new Date(), 7),
+    key: "selection",
+  };
+
+  const handleDateChange = (ranges: RangeKeyDict): void => {
+    const selection = ranges["selection"] as Range;
     setState([selection]);
     onDateChange(selection.startDate, selection.endDate);
   };
 
-  const handleClick = (event) => {
+  const handleClick = (event: React.MouseEvent<HTMLElement>): void => {
     setAnchorEl(event.currentTarget);
   };
 
-  const handleClose = () => {
+  const handleClose = (): void => {
+    setAnchorEl(null);
+  };
+
+  // Clear the date selection
+  const handleClear = (): void => {
+    setState(null);
+    // Optionally, notify the parent component that dates have been cleared.
+    onDateChange(undefined as unknown as Date, undefined as unknown as Date);
     setAnchorEl(null);
   };
 
   const open = Boolean(anchorEl);
   const id = open ? "date-range-picker-popover" : undefined;
+
+  const currentRange = state ?? [defaultRange];
 
   return (
     <div>
@@ -43,7 +58,12 @@ const DateRangePickerComponent = ({ onDateChange }) => {
         variant="outlined"
         size="small"
         label="Date Range"
-        value={`${state[0].startDate.toLocaleDateString()} - ${state[0].endDate.toLocaleDateString()}`}
+        // Display an empty value if no range is selected.
+        value={
+          state
+            ? `${state[0].startDate.toLocaleDateString()} - ${state[0].endDate.toLocaleDateString()}`
+            : ""
+        }
         onClick={handleClick}
         InputProps={{
           endAdornment: (
@@ -65,13 +85,16 @@ const DateRangePickerComponent = ({ onDateChange }) => {
           horizontal: "left",
         }}
       >
-        <Box>
+        <Box sx={{ p: 2 }}>
           <DateRange
             editableDateInputs={true}
             onChange={handleDateChange}
             moveRangeOnFirstSelection={false}
-            ranges={state}
+            ranges={currentRange}
           />
+          <div style={{ marginTop: "8px", textAlign: "center" }}>
+            <button onClick={handleClear}>Clear</button>
+          </div>
         </Box>
       </Popover>
     </div>

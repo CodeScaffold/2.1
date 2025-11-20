@@ -1,19 +1,18 @@
 {
-
   "compilerOptions": {
-    "target": "es2016",  // Change to 'es2020' or 'esnext' if you need modern JS features
-    "module": "commonjs",  // Good for Node.js projects; switch to 'ESNext' if using ES6 modules
+    "target": "es2016",
+    "module": "commonjs",
     "baseUrl": "./",
-    "rootDir": "./src",  // Make sure 'src' is the root directory for your code
     "paths": {
-      "@database": ["src/database/*"]  // You can adjust this alias if needed
+      "@database": ["src/database/*"]
     },
-    "outDir": "./build",  // Where compiled code will be output
-    "esModuleInterop": true,  // Required for correct default imports for many libraries
+    "outDir": "./build",
+    "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "strict": true,  // Ensures strict type-checking
-    "skipLibCheck": true  // Skips type checks on declaration files for faster compilation
+    "strict": true,
+    "skipLibCheck": true,
+    "jsx": "react"
   },
-  "include": ["src/**/*"],  // Includes all files in 'src'
-  "exclude": ["node_modules", "**/*.spec.ts"]  // Excludes test files and node_modules
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "**/*.spec.ts"]
 }

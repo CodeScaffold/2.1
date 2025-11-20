@@ -1,12 +1,12 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../database";
 import Router from "@koa/router";
-import { jwtAuthMiddleware } from "../middleware/auth";
+import { sessionAuthMiddleware } from "../middleware/auth";
 import { convertDate } from "../functions";
 import { Parser } from "json2csv";
 
 const results = new Router();
-const auth = jwtAuthMiddleware();
+const auth = sessionAuthMiddleware();
 
 results.get("/result", auth, async (ctx) => {
   const paginate = ctx.query.paginate !== "false";
@@ -63,12 +63,15 @@ results.get("/result", auth, async (ctx) => {
     orderBy: { id: "desc" },
   });
 
-  const fields = Object.keys(results[0]); // Dynamically create fields from the first result object
-  const json2csvParser = new Parser({ fields });
-  const csv = json2csvParser.parse(results);
+  let csv = "";
+  if (results.length > 0) {
+    const fields = Object.keys(results[0]);
+    const json2csvParser = new Parser({ fields });
+    csv = json2csvParser.parse(results);
+  }
   try {
     const totalResultsCount = await prisma.result.count({ where: whereClause });
-    ctx.body = { results, totalResultsCount };
+    ctx.body = { results, totalResultsCount, csv };
   } catch (error) {
     ctx.status = 500;
     ctx.body = {
