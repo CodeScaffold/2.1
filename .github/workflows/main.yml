@@ -1,0 +1,142 @@
+name: Deploy to Production Server
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    # Build Frontend
+    - name: Install Frontend Dependencies
+      working-directory: ./Front
+      run: npm ci
+      
+    - name: Build Frontend
+      working-directory: ./Front
+      run: npm run build
+      
+    # Build Backend  
+    - name: Install Backend Dependencies
+      working-directory: ./back
+      run: npm ci
+      
+    - name: Generate Prisma Client
+      working-directory: ./back
+      run: npx prisma generate
+      
+    - name: Build Backend
+      working-directory: ./back
+      run: npm run build
+      
+    # Deploy to Production Server
+    - name: Deploy to Server
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: 20.93.7.130
+        username: ${{ secrets.SERVER_USERNAME }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 22
+        script: |
+          # Create application directory if it doesn't exist
+          sudo mkdir -p /var/www/backoffice
+          sudo chown $USER:$USER /var/www/backoffice
+          
+          # Navigate to app directory
+          cd /var/www/backoffice
+          
+          # Pull latest code
+          if [ -d ".git" ]; then
+            git pull origin main
+          else
+            git clone https://github.com/${{ github.repository }} .
+          fi
+          
+          # Install and build frontend
+          cd Front
+          npm ci
+          npm run build
+          
+          # Copy built frontend to nginx directory
+          sudo cp -r dist/* /var/www/html/
+          
+          # Install and build backend
+          cd ../back
+          npm ci
+          npx prisma generate
+          npm run build
+          
+          # Restart backend service (assuming PM2 is used)
+          pm2 restart backoffice-backend || pm2 start dist/app.js --name backoffice-backend
+          
+          # Restart nginx
+          sudo systemctl restart nginx
+          
+    # Copy files via SCP (alternative method)
+    - name: Copy Frontend Build
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: 20.93.7.130
+        username: ${{ secrets.SERVER_USERNAME }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 22
+        source: "Front/dist/*"
+        target: "/tmp/frontend-build"
+        strip_components: 2
+        
+    - name: Copy Backend Build
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'  
+      uses: appleboy/scp-action@v0.1.4
+      with:
+        host: 20.93.7.130
+        username: ${{ secrets.SERVER_USERNAME }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 22
+        source: "back/dist/*,back/package.json,back/prisma/*"
+        target: "/var/www/backoffice/backend"
+        strip_components: 1
+        
+    - name: Setup Backend on Server
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: 20.93.7.130
+        username: ${{ secrets.SERVER_USERNAME }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: 22
+        script: |
+          # Move frontend files to nginx directory
+          sudo cp -r /tmp/frontend-build/* /var/www/html/ 2>/dev/null || true
+          sudo rm -rf /tmp/frontend-build
+          
+          # Setup backend
+          cd /var/www/backoffice/backend
+          npm ci --production
+          
+          # Run database migrations
+          npx prisma migrate deploy
+          
+          # Restart backend service
+          pm2 restart backoffice-backend || pm2 start dist/app.js --name backoffice-backend --watch
+          
+          # Set proper permissions
+          sudo chown -R www-data:www-data /var/www/html
+          sudo chmod -R 755 /var/www/html
+          
+          # Restart nginx
+          sudo systemctl restart nginx
